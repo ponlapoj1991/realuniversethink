@@ -649,12 +649,14 @@ function processThinkingPhase(prompt, preset, temperature, mode, turboMode, thin
 
     const dataAnalysis = analyzeDataStructure(allDataArray);
 
+    // ⭐ Limit data to 100 rows for Thinking API
+    const limitedDataArray = allDataArray.slice(0, 100);
     let enhancedPrompt = prompt;
     if (dataAnalysis.dataType === 'content_only') {
-      enhancedPrompt = formatContentOnlyData(allDataArray, prompt, rangeInfo);
+      enhancedPrompt = formatContentOnlyData(limitedDataArray, prompt, rangeInfo);
     } else if (dataAnalysis.dataType === 'mixed_data') {
-      const calculations = performCalculations(allDataArray, dataAnalysis);
-      enhancedPrompt = formatMixedData(allDataArray, calculations, prompt, rangeInfo);
+      const calculations = performCalculations(limitedDataArray, dataAnalysis);
+      enhancedPrompt = formatMixedData(limitedDataArray, calculations, prompt, rangeInfo);
     }
 
     const dataInfo = rangeInfo + '\n\n' + enhancedPrompt;
@@ -662,8 +664,9 @@ function processThinkingPhase(prompt, preset, temperature, mode, turboMode, thin
 
     Logger.log('=== THINKING PHASE (Separate Call) ===');
     Logger.log('Using Thinking Model: ' + thinkingModel);
+    Logger.log('Sending limited data to Thinking API: ' + limitedDataArray.length + ' rows (out of ' + allDataArray.length + ')');
 
-    // Call Thinking API
+    // Call Thinking API - Limited to 100 rows
     const thinkingResult = callThinkingAPI(dataInfo, prompt, presetSystemMessage, thinkingModel);
 
     if (thinkingResult.thinking && thinkingResult.thinking.length > 0) {
@@ -868,14 +871,26 @@ function processRealUniverseStandard(prompt, preset, temperature, thinkingMode, 
   }
 
 if (thinkingMode) {
-    const dataInfo = rangeInfo + '\n\n' + enhancedPrompt;
+    // ⭐ Limit data to 100 rows for Thinking API
+    const limitedDataArray = allDataArray.slice(0, 100);
+    let limitedEnhancedPrompt = prompt;
+
+    if (dataAnalysis.dataType === 'content_only') {
+      limitedEnhancedPrompt = formatContentOnlyData(limitedDataArray, prompt, rangeInfo);
+    } else if (dataAnalysis.dataType === 'mixed_data') {
+      const limitedCalculations = performCalculations(limitedDataArray, dataAnalysis);
+      limitedEnhancedPrompt = formatMixedData(limitedDataArray, limitedCalculations, prompt, rangeInfo);
+    }
+
+    const dataInfo = rangeInfo + '\n\n' + limitedEnhancedPrompt;
     const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
 
     Logger.log('=== THINKING MODE (NEW) ===');
     Logger.log('API Call #1: Thinking...');
     Logger.log('Using Thinking Model: ' + thinkingModel);
+    Logger.log('Sending limited data to Thinking API: ' + limitedDataArray.length + ' rows (out of ' + allDataArray.length + ')');
 
-    // ⭐ API Call #1: Thinking (with Preset Context)
+    // ⭐ API Call #1: Thinking (with Preset Context) - Limited to 100 rows
     const thinkingResult = callThinkingAPI(dataInfo, prompt, presetSystemMessage, thinkingModel);
 
     if (thinkingResult.thinking && thinkingResult.thinking.length > 0) {
@@ -1154,11 +1169,14 @@ function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingM
   let strategicThinkingSteps = null;
 
   if (thinkingMode) {
-    const dataOverview = `${rangeInfo}\n\nTotal data lines: ${totalRowsVisible}\n\nSample data (first 10 rows):\n${allDataLines.slice(0, 10).join('\n')}`;
+    // ⭐ Limit data to 100 rows for Thinking API
+    const limitedDataLines = allDataLines.slice(0, 100);
+    const dataOverview = `${rangeInfo}\n\nTotal data lines: ${totalRowsVisible}\n\nLimited sample data (first 100 rows out of ${totalRowsVisible}):\n${limitedDataLines.join('\n')}`;
     const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(presetName, 'action'), 'action');
 
     Logger.log('Using Thinking Model: ' + thinkingModel);
-    // ⭐ API Call #1: Strategic Thinking (with Preset Context)
+    Logger.log('Sending limited data to Turbo Thinking API: ' + limitedDataLines.length + ' rows (out of ' + totalRowsVisible + ')');
+    // ⭐ API Call #1: Strategic Thinking (with Preset Context) - Limited to 100 rows
     strategicThinkingResult = callTurboThinkingAPI(dataOverview, userPrompt, presetSystemMessage, thinkingModel);
 
     if (strategicThinkingResult.thinking && strategicThinkingResult.thinking.length > 0) {
@@ -2685,15 +2703,6 @@ body {
                         </div>
 
                         <div class="popup-section">
-                            <div class="popup-title">🧠 Thinking Model</div>
-                            <div class="popup-options">
-                                <div class="popup-option active" onclick="selectThinkingModel('gpt-4.1-mini', this)">Mini (Fast)</div>
-                                <div class="popup-option" onclick="selectThinkingModel('gpt-4.1', this)">Standard</div>
-                                <div class="popup-option" onclick="selectThinkingModel('gpt-4o', this)">Advanced</div>
-                            </div>
-                        </div>
-
-                        <div class="popup-section">
                             <div class="popup-title">AI Creativity</div>
                             <div class="popup-options">
                                 <div class="popup-option active" onclick="selectPopupTemp('Exact', this, 0)">Exact</div>
@@ -2831,18 +2840,9 @@ function selectPopupPreset(presetName, element, presetValue) {
    updateStatusText();
 }
 
-function selectThinkingModel(modelName, element) {
-   thinkingModel = modelName;
-   document.querySelectorAll('#settingsPopup .popup-section:nth-child(3) .popup-option').forEach(option => {
-       option.classList.remove('active');
-   });
-   element.classList.add('active');
-   updateStatusText();
-}
-
 function selectPopupTemp(tempName, element, tempValue) {
    currentTemperature = tempValue;
-   document.querySelectorAll('#settingsPopup .popup-section:nth-child(4) .popup-option').forEach(option => {
+   document.querySelectorAll('#settingsPopup .popup-section:nth-child(3) .popup-option').forEach(option => {
        option.classList.remove('active');
    });
    element.classList.add('active');
@@ -2852,7 +2852,7 @@ function selectPopupTemp(tempName, element, tempValue) {
 function updateStatusText() {
    const mode = document.querySelector('#settingsPopup .popup-section:nth-child(1) .popup-option.active').textContent;
    const preset = document.querySelector('#popupPresetOptions .popup-option.active')?.textContent || 'Loading...';
-   const creativity = document.querySelector('#settingsPopup .popup-section:nth-child(4) .popup-option.active').textContent;
+   const creativity = document.querySelector('#settingsPopup .popup-section:nth-child(3) .popup-option.active').textContent;
 
    const statusText = mode + ' • ' + preset + ' • ' + creativity;
    document.getElementById('statusText').textContent = statusText;
