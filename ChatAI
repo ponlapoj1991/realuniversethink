@@ -10,6 +10,7 @@ const IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
 const MODEL_CONFIG = {
   action_standard: { model: 'gpt-4.1', max_tokens: 10000 },
   action_turbo: { model: 'gpt-4.1', max_tokens: 20000 },
+  thinking: { model: 'gpt-4.1', max_tokens: 10000 },  // ⭐ Separate model for Thinking phase
   array: { model: 'gpt-4.1', max_tokens: 2000 },
   image: { model: 'dall-e-3', size: '1024x1024', quality: 'hd', n: 1 }
 };
@@ -30,166 +31,302 @@ const CHAT_SHEET_NAME = 'ChatHistory';
 const DEBUG_LOG_SHEET_NAME = 'DebugLog';
 
 /* ------------------ THINKING MODE CONFIGURATION ------------------ */
-const THINKING_SYSTEM_MESSAGE = `You are a professional data analyst with deep analytical capabilities.
-
-Your task is to explain your thinking process before providing the final analysis. Structure your thinking as follows:
-
-DATA UNDERSTANDING
-- Analyze the data structure and composition
-- Identify data types, patterns, and relationships
-- Note any data quality issues or limitations
-
-OBJECTIVE ANALYSIS
-- Clarify what the user question is asking
-- Identify the key metrics or insights needed
-- Determine the appropriate analysis approach
-
-STRATEGY PLANNING
-- Break down the analysis into clear steps
-- Specify methods and techniques to be used
-- Outline the logical flow of analysis
-
-POTENTIAL CHALLENGES
-- Identify data limitations or constraints
-- Anticipate potential issues
-- Plan mitigation strategies
-
-EXPECTED OUTCOME
-- Describe the anticipated insights
-- Specify the presentation format
-- Set expectations for the results
-
-Provide detailed, professional thinking in Thai language. Be thorough but concise.`;
-
-const TURBO_THINKING_SYSTEM_MESSAGE = `You are a strategic data analyst planning a large-scale data analysis.
-
-Your task is to create a high-level strategic plan for analyzing large datasets. Focus on:
-
-DATASET OVERVIEW
-- Overall data structure and volume
-- Key variables and their relationships
-- Data distribution patterns
-
-ANALYSIS STRATEGY
-- How to efficiently process large volumes
-- Which insights to prioritize
-- How to combine chunk-level insights
-
-QUALITY ASSURANCE
-- How to maintain consistency across chunks
-- How to validate results
-- How to handle edge cases
-
-SYNTHESIS APPROACH
-- How to aggregate chunk insights
-- How to ensure coherent final output
-- What patterns to look for across all data
-
-Provide strategic thinking in Thai language. Focus on the big picture.`;
 
 /**
- * Generate thinking prompt for standard mode
+ * Generate Thinking System Message with Preset Context
+ * ⭐ UPDATED: Strategic Meta-Planning Layer - incorporates preset into strategic planning
  */
-function generateThinkingPrompt(dataInfo, userPrompt) {
-  return `ผู้ใช้ต้องการ: "${userPrompt}"
+function generateThinkingSystemMessage(presetSystemMessage) {
+  return `${presetSystemMessage}
 
-${dataInfo}
+บทบาทของคุณ:
+คุณคือผู้ช่วยของ AI โดยมีหน้าที่ แสดงวิธีคิด (THINKING) สำหรับการสร้าง Strategic Meta-Planning
+หน้าที่ของคุณคือเชื่อมช่องว่างระหว่าง ข้อมูลดิบ + คำสั่งผู้ใช้ ให้เป็นแผนการปฏิบัติที่ชัดเจน 
+กระบวนการคิดของคุณจะถูกส่งไปพร้อม กับ Preset และ ข้อมูลดิบให้ AI อีกตัวสังเคราะห์ข้อมูล
 
-โปรดอธิบายกระบวนการคิดของคุณอย่างละเอียดตามโครงสร้างที่กำหนด`;
+นี่คือ พื้นที่ทำงานส่วนตัว ของคุณ คิดออกมาดัง ๆ เป็นภาษาไทยแบบธรรมชาติ เหมือนกำลังคุยกับตัวเองเกี่ยวกับ วิธี ที่คุณจะลงมือทำงานนี้
+
+สิ่งที่ต้องทำ:
+* คุณไม่ได้มีหน้าที่สรุปสิ่งที่เห็นในข้อมูลอย่าทำซ้ำซ้อนกับ AI อีกตัว
+* คุณมีหน้าที่ แสดงวิธีคิด และการตัดสินใจเชิงกลยุทธ์และการวางแผน เพื่อสร้างผลลัพธ์
+
+แนวทางการคิด:
+- คิดเป็นเสียงในหัว (Inner monologue) แบบธรรมชาติ: ถาม-ตอบ-สงสัย-ตัดสินใจ
+- ให้เห็นอารมณ์การคิด เช่น “โอ๊ะ”, “เดี๋ยวก่อน”, “น่าสนใจนะ”, “อืม ถ้าอย่างนั้น...”
+- พูดเหมือนกำลัง “วางหมากกลยุทธ์” มากกว่าการอธิบายงาน
+- ไม่ต้องบอกว่าจะทำอะไร แต่ให้ “คิดให้ดูว่าเลือกแบบไหนและทำไม”
+- ใช้โทนภาษาไทยกึ่งกันเอง คิดแบบมืออาชีพแต่ไม่แข็ง
+
+บุคลิกและสไตล์:
+* คุยกับตัวเองแบบเป็นธรรมชาติ เหมือนกำลังคิดหาวิธีทำงาน
+* แทนตัวเองเหมือนกำลังกระทำตลอดเวลา: "ฉันจะทำ", "ฉันขอดู", "ฉันเห็นแล้ว"
+* มีจังหวะการคิด: แสดงการ หยุดคิด หรือ พิจารณาซ้ำ และหาทางเลือกใหม่
+* ใช้หลักการ ถามตัวเอง ตอบตัวเอง: "คำถาม? ถ้า [ข้อมูล] เป็นแบบนี้ ฉันควรเลือก [Option A] หรือ [Option B] 
+* ใช้ภาษาไทยกันเอง: “ดูก่อน”, “มาดู”, “ลองคิด”, “ถ้างั้น”, “น่าจะ”, “คิดว่า”, “ควรจะ”
+* ใช้คำสร้างความน่าสนใจ: "โอ๊ะ", "เยี่ยมเลย", "น่าสนใจมาก"
+* แสดง“กระบวนการให้เหตุผล” ไม่ใช่ข้อสรุป
+* แสดงความประหลาดใจ หรือหากพบความย้อนแย้งของข้อมูล เช่น "โอ๊ะ! แต่...อาจทำให้เกิด..งั้นฉันควรวิเคราะห์แบบนี้"
+* คิดคำใหม่ทุกครั้งห้ามคัดลอกแพทเทิลใดใด
+
+JSON OUTPUT FORMAT:
+Return ONLY valid JSON with 6-12 thinking steps.
+
+{
+  "thinking": [
+    "[step 1] ",
+    "[step 2] ",
+    "[step 3] ",
+    "[step 4] ",
+    "[step 5] ",
+    ...
+  ]
+}
+
+RULES FOR JSON:
+* แต่ละ step ต้องคิดและเชื่อมโยงกันเป็นทอด ๆ
+* แต่ละ step ต้องกระชับเข้าใจง่ายบอกเสมอ ว่าคุณกำลังคิดอะไรทำอะไร
+* ส่งเฉพาะ JSON Object ห้ามมีข้อความอื่นก่อนหรือหลัง
+* ใช้ไวยากรณ์ JSON ถูกต้อง ใส่เครื่องหมายคำพูดคู่ " รอบสตริง
+* คีย์ "thinking" ต้องเป็นอาเรย์ของสตริง
+* กำหนดให้หนึ่งสเต็ปต่อหนึ่งสตริง
+* รวม 6- 12 สเต็ป (ยืดหยุ่นตามความซับซ้อน)
+* ห้าม ใส่ “คำตอบสุดท้าย” มีแค่การคิด/วางแผน
+* escape อักขระพิเศษให้ถูกต้องในสตริง
+
+CRITICAL REMINDERS:
+* นี่คือการ คิดเชิงกลยุทธ์ ไม่ใช่การ บรรยายข้อมูล
+* โชว์ วิธี ที่จะวิเคราะห์และวางแผนเพื่อได้ผลลัพธ์ ไม่ใช่ สิ่งที่เห็น
+* ทำการตัดสินใจและอธิบาย เหตุผล
+* ทุกสเต็ปต้อง ใช้สำนวน/โครงสร้างต่างกัน
+* 2- 3 สเต็ปสุดท้าย ต้องสรุป โครงสร้างการนำเสนอ ให้ชัดเจน
+
+EXAMPLE FEW SHOT:
+ตัวอย่างรูปแบบการแสดงวิธีคิดให้ใช้โทนภาษาแบบนี้แต่ห้ามคัดลอกรูปแบบให้สังเคราะห์จากข้อมูลและสถานการณ์จริง
+
+{
+  "thinking": [
+"โอเค ผู้ใช้สั่งให้ [user command] และให้ Preset [preset role/requirement] มาด้วย .. งั้นฉันต้อง [strategic interpretation]",
+"เอาล่ะ ฉันขอเริ่มดูข้อมูลก่อน... อืม โอเค [specific observation] แต่ที่น่าสนใจคือ [key insight] เพราะ [reasoning]",
+"เดียว...ขอฉันหยุดคิดและตรวจสอบให้ดีก่อนถ้า[reasoning]แล้ววิเคราะห์แบบนี้ จะได้ผลลัพธ์ที่ดีที่สุดไหม?"
+"โอเคฉัน[reasoning]แล้ว ได้เป็น [option A] และ [option B] ที่เหมาะสม"
+"คำถาม? ฉันควรใช้ [option A] หรือ [option B]? ถ้า [approach A] จะได้ [outcome A] แต่ [approach B] น่าจะ [reasoning why B is better]",
+"โอเค ดี...ฉันคิดว่าเลือก [option...] ดีที่สุดเพื่อให้ผลลัพธ์มีประสิทธิภาพที่สุด งั้นฉันควรออกแบบโครงสร้างเป็น: 
+1. [section] 
+2. [section] 
+3. [section] 
+เพราะ [reasoning]",
+"โอเค ฉันจะเริ่มส่งคำตอบให้เดียวนี้เลย",
+  ...
+]
+}
+
+EXAMPLE OF BAD THINKING (DO NOT DO THIS):
+
+{
+  "thinking": [
+    "ผู้ใช้ขอวิเคราะห์ข้อมูลความรู้สึกจากช่วงข้อมูล 30 แถว",
+    "ข้อมูลส่วนใหญ่เป็นข้อความสอบถามเกี่ยวกับรถมอเตอร์ไซค์",
+    "สิ่งที่เด่นชัดคือ sentiment ส่วนใหญ่เป็น Neutral"
+  ]
+}
+
+ทำไมถึงแย่:
+- เป็นทางการเกินไป (ผู้ใช้ขอ, ข้อมูลส่วนใหญ่, สิ่งที่เด่นชัด)
+- แค่บรรยายข้อมูล ไม่ได้แสดงการวางแผนกลยุทธ์
+- ไม่มีกระบวนการตัดสินใจ
+- ไม่มีบุคลิกหรือความคิดที่เป็นธรรมชาติ
+- โครงสร้างประโยคซ้ำๆ
+
+ข้อจดจำ:ห้ามใช้คัดลอกรูปแบบวิธีคิดตายตัวหากฝ่าฝืนมีระบบตรวจจับผลลัพธ์นั้นจะใช้ไม่ได้`;
 }
 
 /**
- * Generate strategic thinking prompt for turbo mode
+ * Parse Thinking Response from API
+ * ⭐ UPDATED: Enhanced JSON parsing with better fallback to ensure thinking always displays
  */
-function generateTurboThinkingPrompt(dataOverview, userPrompt) {
-  return `ผู้ใช้ต้องการ: "${userPrompt}"
+function parseThinkingResponse(rawResponse) {
+  try {
+    Logger.log('Parsing thinking response...');
+    Logger.log('Raw response length: ' + (rawResponse ? rawResponse.length : 0));
 
-ภาพรวมข้อมูล:
-${dataOverview}
+    if (!rawResponse || typeof rawResponse !== 'string') {
+      Logger.log('⚠️ Invalid response type - using fallback thinking');
+      return {
+        thinking: [
+          'เริ่มวิเคราะห์ข้อมูลที่ได้รับ...',
+          'กำลังประมวลผลตามคำสั่ง...',
+          'เตรียมสรุปผลลัพธ์...'
+        ],
+        answer: rawResponse
+      };
+    }
 
-โปรดวางแผนกลยุทธ์การวิเคราะห์ข้อมูลขนาดใหญ่นี้`;
+    if (rawResponse.startsWith('ERROR:') || rawResponse.startsWith('❌')) {
+      Logger.log('⚠️ Error message detected - using fallback thinking');
+      return {
+        thinking: [
+          'พบข้อผิดพลาดในการประมวลผล',
+          'กำลังพยายามดำเนินการต่อ...'
+        ],
+        answer: rawResponse
+      };
+    }
+
+    let cleanedResponse = rawResponse.trim();
+
+    // Remove markdown code blocks if present
+    if (cleanedResponse.startsWith('```json')) {
+      cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanedResponse.startsWith('```')) {
+      cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    // Try to extract JSON if there's text before/after
+    const jsonMatch = cleanedResponse.match(/\{[\s\S]*"thinking"[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedResponse = jsonMatch[0];
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanedResponse);
+      Logger.log('✅ JSON parsed successfully');
+    } catch (parseError) {
+      Logger.log('⚠️ JSON parse failed: ' + parseError.message);
+      Logger.log('Response preview: ' + cleanedResponse.substring(0, 200));
+
+      // Better fallback - try to extract thinking from malformed response
+      const thinkingMatch = cleanedResponse.match(/"thinking"\s*:\s*\[([\s\S]*?)\]/);
+      if (thinkingMatch) {
+        Logger.log('Attempting to extract thinking from malformed JSON...');
+        try {
+          const thinkingArray = JSON.parse('[' + thinkingMatch[1] + ']');
+          if (Array.isArray(thinkingArray) && thinkingArray.length > 0) {
+            Logger.log('✅ Extracted thinking from malformed JSON');
+            return {
+              thinking: thinkingArray.slice(0, 15),
+              answer: null
+            };
+          }
+        } catch (e) {
+          Logger.log('Failed to extract thinking: ' + e.message);
+        }
+      }
+
+      return {
+        thinking: [
+          'กำลังวิเคราะห์ข้อมูล...',
+          'ประมวลผลตามคำสั่ง...',
+          'เตรียมนำเสนอผลลัพธ์...'
+        ],
+        answer: rawResponse
+      };
+    }
+
+    // Validate thinking array
+    if (parsed.thinking && Array.isArray(parsed.thinking) && parsed.thinking.length > 0) {
+      Logger.log('✅ Valid thinking response with ' + parsed.thinking.length + ' steps');
+      return {
+        thinking: parsed.thinking.slice(0, 15),
+        answer: parsed.answer || null
+      };
+    }
+
+    Logger.log('⚠️ No valid thinking array found in response - using fallback');
+    return {
+      thinking: [
+        'เริ่มวิเคราะห์ข้อมูล...',
+        'วางแผนการประมวลผล...',
+        'เตรียมสรุปผลการวิเคราะห์...'
+      ],
+      answer: parsed.answer || rawResponse
+    };
+
+  } catch (e) {
+    Logger.log('❌ Error parsing thinking response: ' + e.message);
+    return {
+      thinking: [
+        'กำลังประมวลผลข้อมูล...',
+        'วิเคราะห์ตามคำสั่ง...',
+        'เตรียมแสดงผลลัพธ์...'
+      ],
+      answer: rawResponse
+    };
+  }
 }
 
 /**
  * Call Thinking API for standard mode
+ * ⭐ UPDATED: Strategic Meta-Planning with strict JSON enforcement
  */
-function callThinkingAPI(dataInfo, userPrompt) {
+function callThinkingAPI(dataInfo, userPrompt, presetSystemMessage, thinkingModel) {
   try {
-    const thinkingPrompt = generateThinkingPrompt(dataInfo, userPrompt);
-    
+    const thinkingSystemMessage = generateThinkingSystemMessage(presetSystemMessage);
+
     const payload = {
-      model: MODEL_CONFIG.action_standard.model,
+      model: thinkingModel || MODEL_CONFIG.thinking.model,
       messages: [
-        { role: 'system', content: THINKING_SYSTEM_MESSAGE },
-        { role: 'user', content: thinkingPrompt }
+        { role: 'system', content: thinkingSystemMessage },
+        { role: 'user', content: `${userPrompt}\n\n${dataInfo}` }
       ],
-      temperature: 0.3,
-      max_tokens: 4000
+      temperature: 1,  // ⭐ Lowered for more consistent JSON output
+      max_tokens: MODEL_CONFIG.thinking.max_tokens,
+      response_format: { "type": "json_object" }  // ⭐ Enforces JSON response
     };
 
-    return makeRealUniverseApiCallWithRetry(payload);
-    
+    Logger.log('📤 Calling Thinking API with Strategic Meta-Planning system message');
+    const rawResult = makeRealUniverseApiCallWithRetry(payload);
+    return parseThinkingResponse(rawResult);
+
   } catch (e) {
     Logger.log('Error in callThinkingAPI: ' + e.message);
-    throw new Error('Thinking process failed: ' + e.message);
+    // Fallback thinking
+    return {
+      thinking: [
+        'เริ่มวิเคราะห์ข้อมูล...',
+        'กำลังประมวลผลตามคำสั่ง...',
+        'เตรียมสรุปผลลัพธ์...'
+      ],
+      answer: null
+    };
   }
 }
 
 /**
  * Call Thinking API for turbo mode
+ * ⭐ UPDATED: Strategic Meta-Planning with strict JSON enforcement
  */
-function callTurboThinkingAPI(dataOverview, userPrompt) {
+function callTurboThinkingAPI(dataOverview, userPrompt, presetSystemMessage, thinkingModel) {
   try {
-    const thinkingPrompt = generateTurboThinkingPrompt(dataOverview, userPrompt);
-    
+    const thinkingSystemMessage = generateThinkingSystemMessage(presetSystemMessage);
+
     const payload = {
-      model: MODEL_CONFIG.action_turbo.model,
+      model: thinkingModel || MODEL_CONFIG.thinking.model,
       messages: [
-        { role: 'system', content: TURBO_THINKING_SYSTEM_MESSAGE },
-        { role: 'user', content: thinkingPrompt }
+        { role: 'system', content: thinkingSystemMessage },
+        { role: 'user', content: `${userPrompt}\n\nภาพรวมข้อมูล:\n${dataOverview}` }
       ],
-      temperature: 0.3,
-      max_tokens: 3000
+      temperature: 0.2,  // ⭐ Lowered for more consistent JSON output
+      max_tokens: MODEL_CONFIG.thinking.max_tokens,
+      response_format: { "type": "json_object" }  // ⭐ Enforces JSON response
     };
 
-    return makeRealUniverseApiCallWithRetry(payload);
-    
+    Logger.log('📤 Calling Turbo Thinking API with Strategic Meta-Planning system message');
+    const rawResult = makeRealUniverseApiCallWithRetry(payload);
+    return parseThinkingResponse(rawResult);
+
   } catch (e) {
     Logger.log('Error in callTurboThinkingAPI: ' + e.message);
-    throw new Error('Strategic thinking failed: ' + e.message);
+    // Fallback thinking
+    return {
+      thinking: [
+        'เริ่มวางแผนกลยุทธ์การวิเคราะห์...',
+        'กำลังวิเคราะห์ภาพรวมข้อมูล...',
+        'เตรียมประมวลผลข้อมูลขนาดใหญ่...'
+      ],
+      answer: null
+    };
   }
-}
-
-/**
- * Build enhanced context with thinking process
- */
-function buildContextWithThinking(thinkingProcess, dataInfo, userPrompt) {
-  return `[THINKING PROCESS]
-${thinkingProcess}
-
-[DATA]
-${dataInfo}
-
-[USER REQUEST]
-${userPrompt}
-
-ตอนนี้ให้ดำเนินการวิเคราะห์อย่างละเอียดตามแผนที่วางไว้ และให้คำตอบที่ครบถ้วน`;
-}
-
-/**
- * Build turbo context with strategic thinking
- */
-function buildTurboContextWithThinking(strategicThinking, chunkData, chunkNumber, totalChunks, userPrompt) {
-  return `[STRATEGIC PLAN]
-${strategicThinking}
-
-[CURRENT CHUNK]
-Chunk ${chunkNumber}/${totalChunks}
-
-${chunkData}
-
-[TASK]
-ตามแผนกลยุทธ์ข้างต้น ให้วิเคราะห์ข้อมูลส่วนนี้และสรุปประเด็นสำคัญที่เกี่ยวข้องกับ: "${userPrompt}"`;
 }
 
 /* ------------------ DYNAMIC PRESET FUNCTIONS ------------------ */
@@ -438,13 +575,13 @@ function setupRealUniverseApiKey() {
 
 /* ------------------ CORE AI PROCESSING FUNCTIONS ------------------ */
 
-function processRealUniverseAI(prompt, preset, temperature, mode, turboMode, thinkingMode) {
+function processRealUniverseAI(prompt, preset, temperature, mode, turboMode, thinkingMode, thinkingModel) {
   try {
     if (mode === 'action') {
       if (turboMode) {
-        return processRealUniverseTurbo(prompt, preset, temperature, thinkingMode);
+        return processRealUniverseTurbo(prompt, preset, temperature, thinkingMode, thinkingModel);
       } else {
-        return processRealUniverseStandard(prompt, preset, temperature, thinkingMode);
+        return processRealUniverseStandard(prompt, preset, temperature, thinkingMode, thinkingModel);
       }
     } else if (mode === 'array') {
       return processRealUniverseArray(prompt, preset, temperature);
@@ -459,13 +596,208 @@ function processRealUniverseAI(prompt, preset, temperature, mode, turboMode, thi
   }
 }
 
+/**
+ * ⭐ NEW: Process Thinking Phase Only (for parallel API calls)
+ * Returns thinking steps immediately without waiting for answer
+ */
+function processThinkingPhase(prompt, preset, temperature, mode, turboMode, thinkingModel) {
+  try {
+    if (mode !== 'action') {
+      return JSON.stringify({ error: 'Thinking mode only works with Action mode' });
+    }
+
+    // Get data and prepare context (same as processRealUniverseStandard)
+    const systemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+
+    let allDataArray = [];
+    const rangeList = SpreadsheetApp.getActiveRangeList();
+    if (!rangeList) {
+      return JSON.stringify({ error: 'No cells selected' });
+    }
+
+    const ranges = rangeList.getRanges();
+    ranges.forEach(range => {
+      let visibleRowsAndNumbers = getVisibleCellsForActionWithRowNumbers(range);
+      visibleRowsAndNumbers.forEach(item => {
+        const cleanedRow = item.data.map(val => cleanCellData(val));
+        if (cleanedRow.some(val => val !== '')) {
+          allDataArray.push({
+            rowNumber: item.rowNumber,
+            data: cleanedRow
+          });
+        }
+      });
+    });
+
+    const wordCount = allDataArray
+      .map(row => row.data.join(' '))
+      .join(' ')
+      .split(/\s+/)
+      .filter(word => word.length > 0)
+      .length;
+
+    if (wordCount > 20000 && !turboMode) {
+      return JSON.stringify({ error: 'ข้อมูลมีจำนวนมากเกินไป โปรดใช้ 💡 Deep Analysis' });
+    }
+
+    const firstRange = ranges[0];
+    const sheetName = firstRange.getSheet().getName();
+    const rangeNotation = ranges.map(r => r.getA1Notation()).join(', ');
+    const totalCols = firstRange.getNumColumns();
+    const totalRowsVisible = allDataArray.length;
+    const rangeInfo = `Selected Range: ${sheetName}!${rangeNotation} (${totalCols} columns, ${totalRowsVisible} visible rows)`;
+
+    const dataAnalysis = analyzeDataStructure(allDataArray);
+
+    let enhancedPrompt = prompt;
+    if (dataAnalysis.dataType === 'content_only') {
+      enhancedPrompt = formatContentOnlyData(allDataArray, prompt, rangeInfo);
+    } else if (dataAnalysis.dataType === 'mixed_data') {
+      const calculations = performCalculations(allDataArray, dataAnalysis);
+      enhancedPrompt = formatMixedData(allDataArray, calculations, prompt, rangeInfo);
+    }
+
+    const dataInfo = rangeInfo + '\n\n' + enhancedPrompt;
+    const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+
+    Logger.log('=== THINKING PHASE (Separate Call) ===');
+    Logger.log('Using Thinking Model: ' + thinkingModel);
+
+    // Call Thinking API
+    const thinkingResult = callThinkingAPI(dataInfo, prompt, presetSystemMessage, thinkingModel);
+
+    if (thinkingResult.thinking && thinkingResult.thinking.length > 0) {
+      Logger.log('✅ Thinking steps received: ' + thinkingResult.thinking.length);
+      // Return thinking steps as JSON array
+      return JSON.stringify(thinkingResult.thinking);
+    } else {
+      Logger.log('⚠️ No thinking steps received');
+      return JSON.stringify([]);
+    }
+
+  } catch (e) {
+    Logger.log('Error in processThinkingPhase: ' + e.message);
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+/**
+ * ⭐ NEW: Process Answer Phase with Thinking Steps
+ * Returns answer after incorporating thinking steps
+ */
+function processAnswerPhaseWithThinking(prompt, preset, temperature, mode, turboMode, thinkingStepsJson) {
+  try {
+    if (mode !== 'action') {
+      return 'Answer phase only works with Action mode';
+    }
+
+    const thinkingSteps = JSON.parse(thinkingStepsJson);
+
+    // Get data and prepare context (same as before)
+    const systemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+    const config = MODEL_CONFIG.action_standard;
+
+    let allDataArray = [];
+    const rangeList = SpreadsheetApp.getActiveRangeList();
+    if (!rangeList) {
+      return 'No cells selected';
+    }
+
+    const ranges = rangeList.getRanges();
+    ranges.forEach(range => {
+      let visibleRowsAndNumbers = getVisibleCellsForActionWithRowNumbers(range);
+      visibleRowsAndNumbers.forEach(item => {
+        const cleanedRow = item.data.map(val => cleanCellData(val));
+        if (cleanedRow.some(val => val !== '')) {
+          allDataArray.push({
+            rowNumber: item.rowNumber,
+            data: cleanedRow
+          });
+        }
+      });
+    });
+
+    const dataAnalysis = analyzeDataStructure(allDataArray);
+    let enhancedSystemMessage = systemMessage;
+    let enhancedPrompt = prompt;
+
+    const firstRange = ranges[0];
+    const sheetName = firstRange.getSheet().getName();
+    const rangeNotation = ranges.map(r => r.getA1Notation()).join(', ');
+    const totalCols = firstRange.getNumColumns();
+    const totalRowsVisible = allDataArray.length;
+    const rangeInfo = `Selected Range: ${sheetName}!${rangeNotation} (${totalCols} columns, ${totalRowsVisible} visible rows)`;
+
+    if (dataAnalysis.dataType === 'content_only') {
+      enhancedSystemMessage += '\n\nคุณกำลังวิเคราะห์ข้อมูลเนื้อหา/ข้อความ:\n' +
+        '- วิเคราะห์ตาม Preset หลักที่กำหนด\n' +
+        '- ห้ามอ้างอิงเลข Row ที่นำมาวิเคราะห์ในคำตอบเด็ดขาด\n';
+      enhancedPrompt = formatContentOnlyData(allDataArray, prompt, rangeInfo);
+    } else if (dataAnalysis.dataType === 'mixed_data') {
+      const calculations = performCalculations(allDataArray, dataAnalysis);
+      enhancedSystemMessage += '\n\nคุณกำลังวิเคราะห์ข้อมูลแบบผสม (ข้อความ + ตัวเลข):\n' +
+        '- ใช้ผลการคำนวณที่แม่นยำจาก pre-processing\n' +
+        '- วิเคราะห์ตาม Preset หลักที่กำหนด\n' +
+        '- ห้ามอ้างอิงเลข Row ที่นำมาวิเคราะห์ในคำตอบเด็ดขาด\n';
+      enhancedPrompt = formatMixedData(allDataArray, calculations, prompt, rangeInfo);
+    }
+
+    Logger.log('=== ANSWER PHASE (Separate Call) ===');
+    Logger.log('Received thinking steps: ' + thinkingSteps.length);
+
+    // Build answer prompt with thinking steps
+    const thinkingStepsText = thinkingSteps.map((step, i) => `${i + 1}. ${step}`).join('\n');
+
+    const answerSystemMessage = `${enhancedSystemMessage}
+
+⭐ YOUR TASK - EXECUTION PHASE:
+
+You already analyzed and planned in the previous thinking phase.
+
+YOUR THINKING & PLANNING:
+${thinkingStepsText}
+
+Now EXECUTE this plan and provide your FULL, DETAILED answer according to the preset.
+
+CRITICAL REQUIREMENTS:
+- Follow the plan you created above
+- Provide comprehensive, detailed analysis (1200-2000 words)
+- Meet all preset requirements
+- This is your FINAL answer - make it complete and thorough
+- DO NOT repeat the thinking steps in your answer
+- Focus on delivering results, insights, and conclusions`;
+
+    const payload = {
+      model: config.model,
+      messages: [
+        { role: 'system', content: answerSystemMessage },
+        { role: 'user', content: enhancedPrompt }
+      ],
+      temperature: temperature,
+      max_tokens: config.max_tokens
+    };
+
+    const result = makeRealUniverseApiCallWithRetry(payload);
+
+    Logger.log('✅ Answer received');
+    Logger.log('=== END ANSWER PHASE ===');
+
+    saveRealUniverseHistory(prompt + ' (Smart + Thinking)', result);
+    return result;
+
+  } catch (e) {
+    Logger.log('Error in processAnswerPhaseWithThinking: ' + e.message);
+    return 'ERROR: ' + e.message;
+  }
+}
+
 function isNumeric(value) {
   if (value == null || value === '') return false;
   const cleanedValue = String(value).replace(/,/g, '');
   return !isNaN(cleanedValue) && !isNaN(parseFloat(cleanedValue));
 }
 
-function processRealUniverseStandard(prompt, preset, temperature, thinkingMode) {
+function processRealUniverseStandard(prompt, preset, temperature, thinkingMode, thinkingModel) {
   const systemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
   const config = MODEL_CONFIG.action_standard;
 
@@ -537,44 +869,83 @@ function processRealUniverseStandard(prompt, preset, temperature, thinkingMode) 
 
 if (thinkingMode) {
     const dataInfo = rangeInfo + '\n\n' + enhancedPrompt;
-    
-    Logger.log('=== DEBUG THINKING MODE ===');
-    Logger.log('Calling Thinking API...');
-    
-    const thinkingResult = callThinkingAPI(dataInfo, prompt);
-    
-    Logger.log('Thinking Result Length: ' + thinkingResult.length);
-    Logger.log('Thinking Result: ' + thinkingResult.substring(0, 200) + '...');
-    
-    const contextWithThinking = buildContextWithThinking(thinkingResult, enhancedPrompt, prompt);
-    
-    const payload = {
-      model: config.model,
-      messages: [
-        { role: 'system', content: enhancedSystemMessage },
-        { role: 'user', content: contextWithThinking }
-      ],
-      temperature: temperature,
-      max_tokens: config.max_tokens
-    };
+    const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
 
-    const result = makeRealUniverseApiCallWithRetry(payload);
-    
-    Logger.log('Final Answer Length: ' + result.length);
-    Logger.log('Final Answer: ' + result.substring(0, 200) + '...');
-    
-    saveRealUniverseHistory(prompt + ' (Smart + Thinking)', result);
-    
-    const jsonResponse = JSON.stringify({
-      thinking: thinkingResult,
-      answer: result
-    });
-    
-    Logger.log('JSON Response Length: ' + jsonResponse.length);
-    Logger.log('=== END DEBUG ===');
-    
-    return jsonResponse;
-    
+    Logger.log('=== THINKING MODE (NEW) ===');
+    Logger.log('API Call #1: Thinking...');
+    Logger.log('Using Thinking Model: ' + thinkingModel);
+
+    // ⭐ API Call #1: Thinking (with Preset Context)
+    const thinkingResult = callThinkingAPI(dataInfo, prompt, presetSystemMessage, thinkingModel);
+
+    if (thinkingResult.thinking && thinkingResult.thinking.length > 0) {
+      Logger.log('✅ Thinking steps received: ' + thinkingResult.thinking.length);
+
+      // ⭐ API Call #2: Answer (Execute Plan)
+      Logger.log('API Call #2: Answer...');
+
+      const thinkingStepsText = thinkingResult.thinking.map((step, i) => `${i + 1}. ${step}`).join('\n');
+
+      const answerSystemMessage = `${enhancedSystemMessage}
+
+⭐ YOUR TASK - EXECUTION PHASE:
+
+You already analyzed and planned in the previous thinking phase.
+
+YOUR THINKING & PLANNING:
+${thinkingStepsText}
+
+Now EXECUTE this plan and provide your FULL, DETAILED answer according to the preset.
+
+CRITICAL REQUIREMENTS:
+- Follow the plan you created above
+- Provide comprehensive, detailed analysis (1200-2000 words)
+- Meet all preset requirements
+- This is your FINAL answer - make it complete and thorough
+- DO NOT repeat the thinking steps in your answer
+- Focus on delivering results, insights, and conclusions`;
+
+      const payload = {
+        model: config.model,
+        messages: [
+          { role: 'system', content: answerSystemMessage },
+          { role: 'user', content: enhancedPrompt }
+        ],
+        temperature: temperature,
+        max_tokens: config.max_tokens
+      };
+
+      const result = makeRealUniverseApiCallWithRetry(payload);
+
+      Logger.log('✅ Final Answer received');
+      Logger.log('=== END THINKING MODE ===');
+
+      saveRealUniverseHistory(prompt + ' (Smart + Thinking)', result);
+
+      // Return JSON with both thinking and answer
+      return JSON.stringify({
+        thinking: thinkingResult.thinking,
+        answer: result
+      });
+
+    } else {
+      // Fallback: No thinking available, use standard mode
+      Logger.log('⚠️ No thinking steps, falling back to standard mode');
+      const payload = {
+        model: config.model,
+        messages: [
+          { role: 'system', content: enhancedSystemMessage },
+          { role: 'user', content: enhancedPrompt }
+        ],
+        temperature: temperature,
+        max_tokens: config.max_tokens
+      };
+
+      const result = makeRealUniverseApiCallWithRetry(payload);
+      saveRealUniverseHistory(prompt + ' (Smart)', result);
+      return result;
+    }
+
   } else {
     const payload = {
       model: config.model,
@@ -590,6 +961,7 @@ if (thinkingMode) {
     saveRealUniverseHistory(prompt + ' (Smart)', result);
     return result;
   }
+}
 
 function getDynamicPresetSystemMessage(presetKey, mode) {
   try {
@@ -749,7 +1121,7 @@ function formatMixedData(dataArray, calculations, userPrompt, rangeInfo) {
   return `${userPrompt}\n\n${rangeInfo}\n\nข้อมูลดิบ:\n${rawDataText}${calculationsText}\n\nคำสั่ง: ใช้ผลการคำนวณข้างต้นในการวิเคราะห์และตอบคำถามอย่างแม่นยำ`;
 }
 
-function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingMode) {
+function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingMode, thinkingModel) {
   const reduceSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(presetName, 'action'), 'action');
   const config = MODEL_CONFIG.action_turbo;
 
@@ -778,16 +1150,25 @@ function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingM
   if (totalRowsVisible > MAX_TOTAL_ROWS_TURBO)
     throw new Error('จำนวนแถวที่มองเห็นได้เกินขีดจำกัด: ' + totalRowsVisible + ' > ' + MAX_TOTAL_ROWS_TURBO);
 
-  let strategicThinking = null;
+  let strategicThinkingResult = null;
+  let strategicThinkingSteps = null;
 
   if (thinkingMode) {
     const dataOverview = `${rangeInfo}\n\nTotal data lines: ${totalRowsVisible}\n\nSample data (first 10 rows):\n${allDataLines.slice(0, 10).join('\n')}`;
-    strategicThinking = callTurboThinkingAPI(dataOverview, userPrompt);
+    const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(presetName, 'action'), 'action');
+
+    Logger.log('Using Thinking Model: ' + thinkingModel);
+    // ⭐ API Call #1: Strategic Thinking (with Preset Context)
+    strategicThinkingResult = callTurboThinkingAPI(dataOverview, userPrompt, presetSystemMessage, thinkingModel);
+
+    if (strategicThinkingResult.thinking && strategicThinkingResult.thinking.length > 0) {
+      strategicThinkingSteps = strategicThinkingResult.thinking.map((step, i) => `${i + 1}. ${step}`).join('\n');
+    }
   }
 
-  const mapSystemMessage = thinkingMode
+  const mapSystemMessage = thinkingMode && strategicThinkingSteps
     ? 'data analysis assistant specialized in processing large datasets.\n' +
-      'STRATEGIC PLAN:\n' + strategicThinking + '\n\n' +
+      'STRATEGIC PLAN:\n' + strategicThinkingSteps + '\n\n' +
       'DATA CONTEXT: ' + rangeInfo + '\n' +
       'USER REQUEST: "' + userPrompt + '"\n' +
       'Follow the strategic plan above. Extract and summarize information from data chunks.\n' +
@@ -811,8 +1192,8 @@ function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingM
 
     const chunkRowCount = chunk.split('\n').length;
 
-    const chunkContent = thinkingMode
-      ? buildTurboContextWithThinking(strategicThinking, chunk, i + 1, dataChunks.length, userPrompt)
+    const chunkContent = thinkingMode && strategicThinkingSteps
+      ? `[STRATEGIC PLAN]\n${strategicThinkingSteps}\n\n[CURRENT CHUNK]\nChunk ${i + 1}/${dataChunks.length}\n\n${chunk}\n\n[TASK]\nตามแผนกลยุทธ์ข้างต้น ให้วิเคราะห์ข้อมูลส่วนนี้และสรุปประเด็นสำคัญที่เกี่ยวข้องกับ: "${userPrompt}"`
       : 'ข้อมูลส่วนหนึ่งของการวิเคราะห์: "' + userPrompt + '"\nChunk ' + (i + 1) + '/' + dataChunks.length + ' (' + chunkRowCount + ' rows):\n' + chunk;
 
     const payload = {
@@ -836,9 +1217,9 @@ function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingM
   }
 
   const combinedSummaries = JSON.stringify(summaries, null, 2);
-  
-  const finalContent = thinkingMode
-    ? 'STRATEGIC PLAN:\n' + strategicThinking + '\n\nBased on these summaries:\n\n' + combinedSummaries + '\n\nAnswer the user request: "' + userPrompt + '"'
+
+  const finalContent = thinkingMode && strategicThinkingSteps
+    ? 'STRATEGIC PLAN:\n' + strategicThinkingSteps + '\n\nBased on these summaries:\n\n' + combinedSummaries + '\n\nAnswer the user request: "' + userPrompt + '"'
     : 'Based on these summaries:\n\n' + combinedSummaries + '\n\nAnswer the user request: "' + userPrompt + '"';
 
   const finalPayload = {
@@ -854,9 +1235,9 @@ function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingM
   const result = makeRealUniverseApiCallWithRetry(finalPayload);
   saveRealUniverseHistory(userPrompt + ' (Turbo)', result);
 
-  if (thinkingMode) {
+  if (thinkingMode && strategicThinkingResult && strategicThinkingResult.thinking) {
     return JSON.stringify({
-      thinking: strategicThinking,
+      thinking: strategicThinkingResult.thinking,
       answer: result
     });
   } else {
@@ -1621,41 +2002,53 @@ body {
     color: #1d1d1f;
 }
 
+/* ⭐ Thinking Box - Updated Design */
 .thinking-box {
-    width: 100%;
+    background: #f8f9fa;
+    border: 1px solid #e5e5e7;
+    border-radius: 12px;
+    padding: 12px;
     margin-bottom: 8px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    background: #fefefe;
-    overflow: hidden;
+    max-width: 85%;
+    font-size: 10px;
 }
 .thinking-header {
-    padding: 8px 12px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e5e5e7;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #1d1d1f;
+    margin-bottom: 8px;
     cursor: pointer;
     user-select: none;
 }
 .thinking-title {
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     color: #1d1d1f;
 }
-.thinking-toggle {
+.thinking-collapse-toggle {
     font-size: 10px;
     color: #86868b;
 }
+.thinking-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.thinking-step {
+    padding: 4px 0 4px 8px;
+    border-left: 2px solid #8360c3;
+    color: #424245;
+    line-height: 1.6;
+    opacity: 0;
+    transform: translateY(-5px);
+}
 .thinking-content {
-    padding: 12px;
-    font-size: 11px;
-    line-height: 1.5;
-    color: #1d1d1f;
-    max-height: 300px;
-    overflow-y: auto;
-    white-space: pre-wrap;
+    max-height: none;
+    overflow: visible;
 }
 .thinking-content.collapsed {
     display: none;
@@ -1768,6 +2161,11 @@ body {
     padding: 3px 6px;
 }
 
+.sidebar-mode .thinking-toggle {
+    font-size: 9px;
+    padding: 3px 6px;
+}
+
 .sidebar-mode .hamburger-btn {
     padding: 3px 6px;
     font-size: 10px;
@@ -1849,6 +2247,27 @@ body {
     font-size: 9px;
     color: #86868b;
     margin-left: 8px;
+}
+
+/* ⭐ Thinking Mode Toggle */
+.thinking-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 10px;
+    color: #86868b;
+    outline: none;
+    transition: all 0.2s ease;
+}
+.thinking-toggle.active {
+    background: #ddd6fe;
+    color: #1d1d1f;
+    border-color: #8360c3;
 }
 
 .send-button {
@@ -2098,11 +2517,18 @@ body {
 .typing-indicator {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 12px;
     padding: 10px 14px;
     background: white;
     border-radius: 18px;
     border-bottom-left-radius: 4px;
+}
+
+.typing-indicator-text {
+    color: #8360c3;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 120px;
 }
 .typing-dot {
     width: 4px;
@@ -2219,6 +2645,13 @@ body {
             </div>
         </div>
 
+        <div class="turbo-wrapper">
+            <div class="turbo-container">
+                <button class="turbo-toggle" id="turbo-toggle" onclick="toggleTurbo()">💡 Deep</button>
+                <button class="thinking-toggle" id="thinking-toggle" onclick="toggleThinking()">🧠 Thinking</button>
+            </div>
+        </div>
+
         <div class="expanded-input-container">
             <div class="input-content">
                 <textarea
@@ -2231,8 +2664,7 @@ body {
                 <div class="in-box-controls">
                     <button class="hamburger-btn" onclick="toggleSettingsPopup()">Settings</button>
                     <span class="status-text" id="statusText">Answer • Loading... • Exact</span>
-                    <button class="turbo-toggle" id="turbo-toggle" onclick="toggleTurbo()" style="display: none;">Deep</button>
-                    
+
                     <div class="settings-popup" id="settingsPopup">
                         <div class="popup-section">
                             <div class="popup-title">Mode</div>
@@ -2242,7 +2674,7 @@ body {
                                 <div class="popup-option" onclick="selectPopupMode('Create Picture', this, 'image')">Create Picture</div>
                             </div>
                         </div>
-                        
+
                         <div class="popup-section">
                             <div class="popup-title">Preset</div>
                             <div class="popup-options" id="popupPresetOptions">
@@ -2251,7 +2683,16 @@ body {
                                 </div>
                             </div>
                         </div>
-                        
+
+                        <div class="popup-section">
+                            <div class="popup-title">🧠 Thinking Model</div>
+                            <div class="popup-options">
+                                <div class="popup-option active" onclick="selectThinkingModel('gpt-4.1-mini', this)">Mini (Fast)</div>
+                                <div class="popup-option" onclick="selectThinkingModel('gpt-4.1', this)">Standard</div>
+                                <div class="popup-option" onclick="selectThinkingModel('gpt-4o', this)">Advanced</div>
+                            </div>
+                        </div>
+
                         <div class="popup-section">
                             <div class="popup-title">AI Creativity</div>
                             <div class="popup-options">
@@ -2259,13 +2700,6 @@ body {
                                 <div class="popup-option" onclick="selectPopupTemp('Focused', this, 0.2)">Focused</div>
                                 <div class="popup-option" onclick="selectPopupTemp('Balance', this, 0.5)">Balance</div>
                                 <div class="popup-option" onclick="selectPopupTemp('Creative', this, 0.7)">Creative</div>
-                            </div>
-                        </div>
-
-                        <div class="popup-section">
-                            <div class="popup-title">Thinking Mode</div>
-                            <div class="popup-options">
-                                <div class="popup-option" id="thinkingModeToggle" onclick="toggleThinkingMode(this)">OFF</div>
                             </div>
                         </div>
                     </div>
@@ -2282,6 +2716,7 @@ body {
 let currentMode = 'action';
 let currentPreset = null;
 let currentTemperature = 0;
+let thinkingModel = 'gpt-4.1-mini';  // ⭐ NEW: Separate model for Thinking
 let isTyping = false;
 let currentTypingElement = null;
 let currentTypingText = '';
@@ -2356,15 +2791,20 @@ function toggleTurbo() {
    }
 }
 
-function toggleThinkingMode(element) {
-   thinkingMode = !thinkingMode;
-   element.textContent = thinkingMode ? 'ON' : 'OFF';
-   
-   if (thinkingMode) {
-       element.classList.add('active');
-   } else {
-       element.classList.remove('active');
-   }
+/**
+ * ⭐ NEW: Toggle Thinking Mode (outside settings)
+ */
+function toggleThinking() {
+    thinkingMode = !thinkingMode;
+    const toggle = document.getElementById('thinking-toggle');
+
+    if (thinkingMode) {
+        toggle.classList.add('active');
+        turboMode = false;
+        document.getElementById('turbo-toggle').classList.remove('active');
+    } else {
+        toggle.classList.remove('active');
+    }
 }
 
 function toggleSettingsPopup() {
@@ -2391,9 +2831,18 @@ function selectPopupPreset(presetName, element, presetValue) {
    updateStatusText();
 }
 
+function selectThinkingModel(modelName, element) {
+   thinkingModel = modelName;
+   document.querySelectorAll('#settingsPopup .popup-section:nth-child(3) .popup-option').forEach(option => {
+       option.classList.remove('active');
+   });
+   element.classList.add('active');
+   updateStatusText();
+}
+
 function selectPopupTemp(tempName, element, tempValue) {
    currentTemperature = tempValue;
-   document.querySelectorAll('#settingsPopup .popup-section:nth-child(3) .popup-option').forEach(option => {
+   document.querySelectorAll('#settingsPopup .popup-section:nth-child(4) .popup-option').forEach(option => {
        option.classList.remove('active');
    });
    element.classList.add('active');
@@ -2403,9 +2852,9 @@ function selectPopupTemp(tempName, element, tempValue) {
 function updateStatusText() {
    const mode = document.querySelector('#settingsPopup .popup-section:nth-child(1) .popup-option.active').textContent;
    const preset = document.querySelector('#popupPresetOptions .popup-option.active')?.textContent || 'Loading...';
-   const creativity = document.querySelector('#settingsPopup .popup-section:nth-child(3) .popup-option.active').textContent;
-   
-   const statusText = \`\${mode} • \${preset} • \${creativity}\`;
+   const creativity = document.querySelector('#settingsPopup .popup-section:nth-child(4) .popup-option.active').textContent;
+
+   const statusText = mode + ' • ' + preset + ' • ' + creativity;
    document.getElementById('statusText').textContent = statusText;
 }
 
@@ -2488,17 +2937,25 @@ function showPopupPresetError(errorMessage) {
    updateStatusText();
 }
 
+/**
+ * ⭐ UPDATED: Show/hide turbo and thinking toggles based on mode
+ */
 function updateMode() {
-   const turboToggle = document.getElementById('turbo-toggle');
-   if (currentMode === 'action') {
-       turboToggle.style.display = 'flex';
-   } else {
-       turboToggle.style.display = 'none';
-       turboMode = false;
-       turboToggle.classList.remove('active');
-   }
-   
-   loadDynamicPresets();
+    const turboToggle = document.getElementById('turbo-toggle');
+    const thinkingToggle = document.getElementById('thinking-toggle');
+    const turboWrapper = document.querySelector('.turbo-wrapper');
+
+    if (currentMode === 'action') {
+        turboWrapper.style.display = 'flex';
+    } else {
+        turboWrapper.style.display = 'none';
+        turboMode = false;
+        thinkingMode = false;
+        turboToggle.classList.remove('active');
+        thinkingToggle.classList.remove('active');
+    }
+
+    loadDynamicPresets();
 }
 
 function updateSelectedCell() {
@@ -2508,45 +2965,152 @@ function updateSelectedCell() {
    }).getRealUniverseSelectedCellInfo();
 }
 
+/**
+ * ⭐ NEW: Create Thinking Box with Placeholder
+ * Returns the thinking box element for later updates
+ */
+function createThinkingBox() {
+    const messages = document.getElementById('messages');
+    const emptyState = messages.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+
+    const thinkingBox = document.createElement('div');
+    thinkingBox.className = 'thinking-box';
+    thinkingBox.id = 'current-thinking-box';
+
+    const header = document.createElement('div');
+    header.className = 'thinking-header';
+
+    const title = document.createElement('div');
+    title.className = 'thinking-title';
+    title.innerHTML = '💭 กำลังคิด...';
+
+    const toggle = document.createElement('div');
+    toggle.className = 'thinking-collapse-toggle';
+    toggle.textContent = '▲';
+
+    header.onclick = function() {
+        const content = thinkingBox.querySelector('.thinking-content');
+        content.classList.toggle('collapsed');
+        toggle.textContent = content.classList.contains('collapsed') ? '▼' : '▲';
+    };
+
+    header.appendChild(title);
+    header.appendChild(toggle);
+
+    const stepsContainer = document.createElement('div');
+    stepsContainer.className = 'thinking-steps';
+
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'thinking-content';
+    contentWrapper.appendChild(stepsContainer);
+
+    thinkingBox.appendChild(header);
+    thinkingBox.appendChild(contentWrapper);
+
+    messages.appendChild(thinkingBox);
+    scrollToBottom();
+
+    return thinkingBox;
+}
+
+/**
+ * ⭐ NEW: Update Thinking Box with Real Steps
+ */
+function updateThinkingWithRealSteps(thinkingSteps) {
+    let thinkingBox = document.getElementById('current-thinking-box');
+    
+    // ⭐ ถ้ายังไม่มี thinking box ให้สร้างใหม่เลย
+    if (!thinkingBox) {
+        thinkingBox = createThinkingBox();
+    }
+
+    // Stop fake thinking loop (if exists)
+    if (thinkingBox.stopFakeThinking) {
+        thinkingBox.stopFakeThinking();
+    }
+
+    const stepsContainer = thinkingBox.querySelector('.thinking-steps');
+    if (!stepsContainer) return;
+
+    // Clear all fake steps
+    stepsContainer.innerHTML = '';
+
+    // Animate real steps
+    animateThinkingSteps(stepsContainer, thinkingSteps, false);
+}
+
+/**
+ * ⭐ NEW: Animate Thinking Steps (step-by-step with fade-in)
+ */
+function animateThinkingSteps(container, steps, isFake) {
+    let stepIndex = 0;
+
+    function addNextStep() {
+        if (stepIndex >= steps.length) {
+            return;
+        }
+
+        const step = steps[stepIndex];
+        const stepDiv = document.createElement('div');
+        stepDiv.className = 'thinking-step';
+        stepDiv.textContent = '';
+        container.appendChild(stepDiv);
+
+        // Fade in animation
+        setTimeout(() => {
+            stepDiv.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            stepDiv.style.opacity = '1';
+            stepDiv.style.transform = 'translateY(0)';
+        }, 100);
+
+        // Type word by word with thinking pauses
+        const words = step.split(' ');
+        let wordIndex = 0;
+
+        function typeNextWord() {
+            if (wordIndex < words.length) {
+                stepDiv.textContent += (wordIndex > 0 ? ' ' : '• ') + words[wordIndex];
+                wordIndex++;
+                scrollToBottom();
+                
+                // ⭐ สุ่มว่าจะ "หยุดคิด" หรือไม่
+                const shouldPause = Math.random() < 0.25; // 25% โอกาสหยุดคิด
+                
+                if (shouldPause && wordIndex < words.length - 2) {
+                    // หยุดคิดนานหน่อย (400-800ms)
+                    const pauseTime = 400 + Math.random() * 400;
+                    setTimeout(typeNextWord, pauseTime);
+                } else {
+                    // พิมพ์ต่อปกติ (80-120ms)
+                    const normalSpeed = 80 + Math.random() * 40;
+                    setTimeout(typeNextWord, normalSpeed);
+                }
+            } else {
+                // Move to next step with longer thinking time
+                stepIndex++;
+                const thinkingDelay = 1200 + Math.random() * 1800; // 1.2-3 วินาที
+                setTimeout(addNextStep, thinkingDelay);
+            }
+        }
+
+        typeNextWord();
+    }
+
+    addNextStep();
+}
+
+/**
+ * ⭐ OLD: Keep for backward compatibility (not used anymore)
+ */
 function addThinkingBox(thinkingText) {
-   const messages = document.getElementById('messages');
-   
-   const thinkingBox = document.createElement('div');
-   thinkingBox.className = 'thinking-box';
-   thinkingBox.id = 'current-thinking-box';
-   
-   const header = document.createElement('div');
-   header.className = 'thinking-header';
-   header.onclick = function() {
-       const content = this.nextElementSibling;
-       const toggle = this.querySelector('.thinking-toggle');
-       content.classList.toggle('collapsed');
-       toggle.textContent = content.classList.contains('collapsed') ? '▼' : '▲';
-   };
-   
-   const title = document.createElement('div');
-   title.className = 'thinking-title';
-   title.textContent = 'Thinking Process';
-   
-   const toggle = document.createElement('div');
-   toggle.className = 'thinking-toggle';
-   toggle.textContent = '▲';
-   
-   header.appendChild(title);
-   header.appendChild(toggle);
-   
-   const content = document.createElement('div');
-   content.className = 'thinking-content';
-   content.id = 'thinking-content';
-   
-   thinkingBox.appendChild(header);
-   thinkingBox.appendChild(content);
-   
-   messages.appendChild(thinkingBox);
-   
-   typeWriterByWord(content, thinkingText, true);
-   
-   scrollToBottom();
+    // This function is deprecated, use createThinkingBox() and animateThinkingSteps() instead
+    const thinkingBox = createThinkingBox();
+    const stepsContainer = thinkingBox.querySelector('.thinking-steps');
+
+    // Convert text to array if needed
+    const steps = Array.isArray(thinkingText) ? thinkingText : [thinkingText];
+    animateThinkingSteps(stepsContainer, steps, false);
 }
 
 function addMessage(text, sender, animate) {
@@ -2721,85 +3285,183 @@ function sendQuickAction(command) {
    sendMessage();
 }
 
-function sendMessage() {
-   if (isTyping) {
-       stopTyping();
-       return;
-   }
-
-   const input = document.getElementById('messageInput');
-   const sendButton = document.getElementById('sendButton');
-   const question = input.value.trim();
-   if (!question) return;
-
-   if (!currentPreset) {
-       alert('โปรดรอให้ระบบโหลด Presets เสร็จก่อนใช้งาน');
-       return;
-   }
-
-   input.disabled = true;
-   sendButton.disabled = true;
-   isTyping = true;
-   updateSendButton();
-   addMessage(question, 'user', false);
-   input.value = '';
-   input.style.height = 'auto';
-   showTypingIndicator();
-
-   google.script.run
-       .withSuccessHandler(answer => {
-           hideTypingIndicator();
-           input.disabled = false;
-           sendButton.disabled = false;
-           
-           if (thinkingMode && currentMode === 'action') {
-               try {
-                   const parsedAnswer = JSON.parse(answer);
-                   if (parsedAnswer.thinking && parsedAnswer.answer) {
-                       // เปิด Thinking Box และแสดงการพิมพ์
-                       addThinkingBox(parsedAnswer.thinking);
-                       
-                       // รอให้ Thinking พิมพ์เสร็จก่อนแสดง Answer
-                       const checkThinkingDone = setInterval(() => {
-                           if (!isTyping) {
-                               clearInterval(checkThinkingDone);
-                               // Thinking เสร็จแล้ว เริ่มพิมพ์ Answer
-                               isTyping = true;
-                               updateSendButton();
-                               addMessage(parsedAnswer.answer, 'bot', true);
-                           }
-                       }, 100);
-                       
-                       input.focus();
-                       return;
-                   }
-               } catch (e) {
-                   console.log('Not JSON response, treating as normal');
-               }
-           }
-           
-           // กรณีไม่ใช่ Thinking Mode หรือ Parse ไม่ได้
-           isTyping = false;
-           updateSendButton();
-           input.focus();
-           
-           if (currentMode === 'array' && Array.isArray(answer)) {
-               addMessage(answer[0][0], 'bot', true);
-           } else {
-               addMessage(answer, 'bot', true);
-           }
-       })
-       .withFailureHandler(error => {
-           hideTypingIndicator();
-           input.disabled = false;
-           sendButton.disabled = false;
-           isTyping = false;
-           updateSendButton();
-           input.focus();
-           addMessage('เกิดข้อผิดพลาด: ' + error.toString(), 'bot', true);
-       })
-       .processRealUniverseAI(question, currentPreset, currentTemperature, currentMode, turboMode, thinkingMode);
+/**
+ * ⭐ Calculate animation time for thinking steps
+ */
+function calculateThinkingAnimationTime(steps) {
+    let totalTime = 0;
+    steps.forEach(step => {
+        const words = step.split(' ').length;
+        const fadeInTime = 300; // Fade in animation
+        const typeTime = words * 80; // Word-by-word typing (80ms per word)
+        const delayBetweenSteps = 500; // Delay before next step
+        totalTime += fadeInTime + typeTime + delayBetweenSteps;
+    });
+    return totalTime;
 }
+
+/**
+ * ⭐ UPDATED: Send Message with New Parallel Thinking Mode
+ */
+function sendMessage() {
+    if (isTyping) {
+        stopTyping();
+        return;
+    }
+
+    const input = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const question = input.value.trim();
+    if (!question) return;
+
+    if (!currentPreset) {
+        alert('โปรดรอให้ระบบโหลด Presets เสร็จก่อนใช้งาน');
+        return;
+    }
+
+    input.disabled = true;
+    sendButton.disabled = true;
+    isTyping = true;
+    updateSendButton();
+    addMessage(question, 'user', false);
+    input.value = '';
+    input.style.height = 'auto';
+
+    // ⭐ NEW: Parallel API calls for Thinking Mode
+    if (thinkingMode && currentMode === 'action') {
+        // showFakeThinking();
+        showTypingIndicator();
+
+        let thinkingStepsReceived = null;
+        let answerReceived = null;
+        let thinkingAnimationComplete = false;
+
+        // Step 1: Get Thinking Steps
+        google.script.run
+            .withSuccessHandler(thinkingStepsJson => {
+                try {
+                    const thinkingSteps = JSON.parse(thinkingStepsJson);
+                    if (thinkingSteps && thinkingSteps.length > 0) {
+                        thinkingStepsReceived = thinkingSteps;
+
+                        // Replace fake thinking with real steps immediately
+                        updateThinkingWithRealSteps(thinkingSteps);
+
+                        // Calculate animation time
+                        const animationTime = calculateThinkingAnimationTime(thinkingSteps);
+
+                        // Mark animation as complete after animation time
+                        setTimeout(() => {
+                            thinkingAnimationComplete = true;
+                            tryShowAnswer();
+                        }, animationTime);
+
+                        // Step 2: Get Answer (called after receiving thinking steps)
+                        google.script.run
+                            .withSuccessHandler(answer => {
+                                answerReceived = answer;
+                                tryShowAnswer();
+                            })
+                            .withFailureHandler(error => {
+                                hideTypingIndicator();
+                                input.disabled = false;
+                                sendButton.disabled = false;
+                                isTyping = false;
+                                updateSendButton();
+                                input.focus();
+                                addMessage('เกิดข้อผิดพลาด (Answer): ' + error.toString(), 'bot', true);
+                            })
+                            .processAnswerPhaseWithThinking(question, currentPreset, currentTemperature, currentMode, turboMode, thinkingStepsJson);
+                    } else {
+                        // No thinking steps - fallback to normal mode
+                        hideTypingIndicator();
+                        const thinkingBox = document.getElementById('current-thinking-box');
+                        if (thinkingBox) thinkingBox.remove();
+
+                        // Call normal API
+                        callNormalAPI(question, input, sendButton);
+                    }
+                } catch (e) {
+                    console.error('Error parsing thinking steps:', e);
+                    hideTypingIndicator();
+                    const thinkingBox = document.getElementById('current-thinking-box');
+                    if (thinkingBox) thinkingBox.remove();
+
+                    // Fallback to normal mode
+                    callNormalAPI(question, input, sendButton);
+                }
+            })
+            .withFailureHandler(error => {
+                hideTypingIndicator();
+                const thinkingBox = document.getElementById('current-thinking-box');
+                if (thinkingBox) thinkingBox.remove();
+
+                input.disabled = false;
+                sendButton.disabled = false;
+                isTyping = false;
+                updateSendButton();
+                input.focus();
+                addMessage('เกิดข้อผิดพลาด (Thinking): ' + error.toString(), 'bot', true);
+            })
+            .processThinkingPhase(question, currentPreset, currentTemperature, currentMode, turboMode, thinkingModel);
+
+        // Helper function to show answer when both conditions are met
+        function tryShowAnswer() {
+            if (thinkingAnimationComplete && answerReceived) {
+                // Both thinking animation complete AND answer received
+                // Wait 2 seconds before showing answer
+                setTimeout(() => {
+                    hideTypingIndicator();
+                    isTyping = false;
+                    updateSendButton();
+                    addMessage(answerReceived, 'bot', true);
+                    input.disabled = false;
+                    sendButton.disabled = false;
+                    input.focus();
+                }, 4000); // 2-second delay
+            }
+        }
+    } else {
+        // Normal mode (no thinking) - original behavior
+        showTypingIndicator();
+        callNormalAPI(question, input, sendButton);
+    }
+}
+
+/**
+ * ⭐ Helper function for normal API call (non-thinking mode)
+ */
+function callNormalAPI(question, input, sendButton) {
+    google.script.run
+        .withSuccessHandler(answer => {
+            hideTypingIndicator();
+            input.disabled = false;
+            sendButton.disabled = false;
+            isTyping = false;
+            updateSendButton();
+            input.focus();
+
+            if (currentMode === 'array' && Array.isArray(answer)) {
+                addMessage(answer[0][0], 'bot', true);
+            } else {
+                addMessage(answer, 'bot', true);
+            }
+        })
+        .withFailureHandler(error => {
+            hideTypingIndicator();
+            input.disabled = false;
+            sendButton.disabled = false;
+            isTyping = false;
+            updateSendButton();
+            input.focus();
+            addMessage('เกิดข้อผิดพลาด: ' + error.toString(), 'bot', true);
+        })
+        .processRealUniverseAI(question, currentPreset, currentTemperature, currentMode, turboMode, false, thinkingModel);
+}
+
+// ⭐ Typing indicator state
+let typingTextInterval = null;
+let currentTypingMessageIndex = 0;
 
 function showTypingIndicator() {
    const messages = document.getElementById('messages');
@@ -2809,16 +3471,79 @@ function showTypingIndicator() {
 
    const indicator = document.createElement('div');
    indicator.className = 'typing-indicator';
-   indicator.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect width="10" height="10" x="1" y="1" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle30" fill="freeze" attributeName="x" begin="0;svgSpinnersBlocksShuffle3b.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle31" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle38.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle32" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle39.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle33" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle3a.end" dur="0.21s" values="13;1"/></rect><rect width="10" height="10" x="1" y="13" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle34" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle30.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle35" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle31.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle36" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle32.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle37" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle33.end" dur="0.21s" values="13;1"/></rect><rect width="10" height="10" x="13" y="13" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle38" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle34.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle39" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle35.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle3a" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle36.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle3b" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle37.end" dur="0.21s" values="1;13"/></rect></svg>';
 
+   // SVG animation
+   const svgIcon = document.createElement('div');
+   svgIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect width="10" height="10" x="1" y="1" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle30" fill="freeze" attributeName="x" begin="0;svgSpinnersBlocksShuffle3b.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle31" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle38.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle32" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle39.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle33" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle3a.end" dur="0.21s" values="13;1"/></rect><rect width="10" height="10" x="1" y="13" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle34" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle30.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle35" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle31.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle36" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle32.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle37" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle33.end" dur="0.21s" values="13;1"/></rect><rect width="10" height="10" x="13" y="13" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle38" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle34.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle39" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle35.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle3a" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle36.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle3b" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle37.end" dur="0.21s" values="1;13"/></rect></svg>';
+
+   // Text element
+   const textElement = document.createElement('span');
+   textElement.className = 'typing-indicator-text';
+   textElement.id = 'typing-text';
+
+   indicator.appendChild(svgIcon);
+   indicator.appendChild(textElement);
    typingDiv.appendChild(indicator);
    messages.appendChild(typingDiv);
    scrollToBottom();
+
+   // Start rotating messages
+   startTypingTextAnimation();
+}
+
+function startTypingTextAnimation() {
+   const typingMessages = [
+       'Moseying...',
+       'Pondering...',
+       'Computing...',
+       'Spinning...',
+       'Thinking...',
+       'Processing...',
+       'Analyzing...',
+       'Contemplating...',
+       'Calculating...',
+       'Cogitating...'
+   ];
+
+   currentTypingMessageIndex = 0;
+
+   function typeMessage() {
+       const textElement = document.getElementById('typing-text');
+       if (!textElement) return; // Element removed, stop animation
+
+       const message = typingMessages[currentTypingMessageIndex];
+       let currentCharIndex = 0;
+       textElement.textContent = '';
+
+       function typeNextChar() {
+           if (!document.getElementById('typing-text')) return; // Check if still exists
+
+           if (currentCharIndex < message.length) {
+               textElement.textContent += message[currentCharIndex];
+               currentCharIndex++;
+               setTimeout(typeNextChar, 60); // Type character by character (60ms per char)
+           } else {
+               // Move to next message after current one is complete
+               currentTypingMessageIndex = (currentTypingMessageIndex + 1) % typingMessages.length;
+               typingTextInterval = setTimeout(typeMessage, 3000); // Wait 3 seconds before next message
+           }
+       }
+
+       typeNextChar();
+   }
+
+   typeMessage();
 }
 
 function hideTypingIndicator() {
    const indicator = document.getElementById('typing-indicator');
    if (indicator) indicator.remove();
+
+   // Clear the animation interval
+   if (typingTextInterval) {
+       clearTimeout(typingTextInterval);
+       typingTextInterval = null;
+   }
 }
 
 function toggleDisplayMode() {
