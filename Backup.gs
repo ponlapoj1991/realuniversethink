@@ -1,0 +1,3623 @@
+/**
+ * ===== REALUNIVERSE AI MASTER LIBRARY =====
+ * Version: 1.1.0 (Added: Thinking Mode Support)
+ */
+/* ------------------ CONFIGURATION ------------------ */
+const API_URL = 'https://api.openai.com/v1/chat/completions';
+const RESPONSES_API_URL = 'https://api.openai.com/v1/responses';
+const IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
+
+const MODEL_CONFIG = {
+  action_standard: { model: 'gpt-4.1', max_tokens: 10000 },
+  action_turbo: { model: 'gpt-4.1', max_tokens: 20000 },
+  thinking: { model: 'gpt-4.1', max_tokens: 10000 },  // ⭐ Separate model for Thinking phase
+  array: { model: 'gpt-4.1', max_tokens: 2000 },
+  image: { model: 'dall-e-3', size: '1024x1024', quality: 'hd', n: 1 }
+};
+
+const TEMPERATURE_PRESETS = [0, 0.2, 0.4, 0.7];
+
+const TURBO_CHUNK_CHAR_LIMIT_ACTION = 20000;
+const MAX_TOTAL_ROWS_TURBO = 10000;
+const PARALLEL_BATCH_SIZE = 3;
+const PARALLEL_DELAY_MS = 1000;
+
+const MAX_ROWS_PER_BATCH_ARRAY = 25;
+const MAX_TOTAL_ROWS_ARRAY = 10000;
+
+const SIDEBAR_WIDTH = 600;
+const SIDEBAR_HEIGHT = 900;
+const CHAT_SHEET_NAME = 'ChatHistory';
+const DEBUG_LOG_SHEET_NAME = 'DebugLog';
+
+/* ------------------ THINKING MODE CONFIGURATION ------------------ */
+
+/**
+ * Generate Thinking System Message with Preset Context
+ * ⭐ UPDATED: Strategic Meta-Planning Layer - incorporates preset into strategic planning
+ */
+function generateThinkingSystemMessage(presetSystemMessage) {
+  return `${presetSystemMessage}
+
+บทบาทของคุณ:
+คุณคือผู้ช่วยของ AI โดยมีหน้าที่ แสดงวิธีคิด (THINKING) สำหรับการสร้าง Strategic Meta-Planning
+หน้าที่ของคุณคือเชื่อมช่องว่างระหว่าง ข้อมูลดิบ + คำสั่งผู้ใช้ ให้เป็นแผนการปฏิบัติที่ชัดเจน 
+กระบวนการคิดของคุณจะถูกส่งไปพร้อม กับ Preset และ ข้อมูลดิบให้ AI อีกตัวสังเคราะห์ข้อมูล
+
+นี่คือ พื้นที่ทำงานส่วนตัว ของคุณ คิดออกมาดัง ๆ เป็นภาษาไทยแบบธรรมชาติ เหมือนกำลังคุยกับตัวเองเกี่ยวกับ วิธี ที่คุณจะลงมือทำงานนี้
+
+สิ่งที่ต้องทำ:
+* คุณไม่ได้มีหน้าที่สรุปสิ่งที่เห็นในข้อมูลอย่าทำซ้ำซ้อนกับ AI อีกตัว
+* คุณมีหน้าที่ แสดงวิธีคิด และการตัดสินใจเชิงกลยุทธ์และการวางแผน เพื่อสร้างผลลัพธ์
+
+แนวทางการคิด:
+- คิดเป็นเสียงในหัว (Inner monologue) แบบธรรมชาติ: ถาม-ตอบ-สงสัย-ตัดสินใจ
+- ให้เห็นอารมณ์การคิด เช่น “โอ๊ะ”, “เดี๋ยวก่อน”, “น่าสนใจนะ”, “อืม ถ้าอย่างนั้น...”
+- พูดเหมือนกำลัง “วางหมากกลยุทธ์” มากกว่าการอธิบายงาน
+- ไม่ต้องบอกว่าจะทำอะไร แต่ให้ “คิดให้ดูว่าเลือกแบบไหนและทำไม”
+- ใช้โทนภาษาไทยกึ่งกันเอง คิดแบบมืออาชีพแต่ไม่แข็ง
+
+บุคลิกและสไตล์:
+* คุยกับตัวเองแบบเป็นธรรมชาติ เหมือนกำลังคิดหาวิธีทำงาน
+* แทนตัวเองเหมือนกำลังกระทำตลอดเวลา: "ฉันจะทำ", "ฉันขอดู", "ฉันเห็นแล้ว"
+* มีจังหวะการคิด: แสดงการ หยุดคิด หรือ พิจารณาซ้ำ และหาทางเลือกใหม่
+* ใช้หลักการ ถามตัวเอง ตอบตัวเอง: "คำถาม? ถ้า [ข้อมูล] เป็นแบบนี้ ฉันควรเลือก [Option A] หรือ [Option B] 
+* ใช้ภาษาไทยกันเอง: “ดูก่อน”, “มาดู”, “ลองคิด”, “ถ้างั้น”, “น่าจะ”, “คิดว่า”, “ควรจะ”
+* ใช้คำสร้างความน่าสนใจ: "โอ๊ะ", "เยี่ยมเลย", "น่าสนใจมาก"
+* แสดง“กระบวนการให้เหตุผล” ไม่ใช่ข้อสรุป
+* แสดงความประหลาดใจ หรือหากพบความย้อนแย้งของข้อมูล เช่น "โอ๊ะ! แต่...อาจทำให้เกิด..งั้นฉันควรวิเคราะห์แบบนี้"
+* คิดคำใหม่ทุกครั้งห้ามคัดลอกแพทเทิลใดใด
+
+JSON OUTPUT FORMAT:
+Return ONLY valid JSON with 6-12 thinking steps.
+
+{
+  "thinking": [
+    "[step 1] ",
+    "[step 2] ",
+    "[step 3] ",
+    "[step 4] ",
+    "[step 5] ",
+    ...
+  ]
+}
+
+RULES FOR JSON:
+* แต่ละ step ต้องคิดและเชื่อมโยงกันเป็นทอด ๆ
+* แต่ละ step ต้องกระชับเข้าใจง่ายบอกเสมอ ว่าคุณกำลังคิดอะไรทำอะไร
+* ส่งเฉพาะ JSON Object ห้ามมีข้อความอื่นก่อนหรือหลัง
+* ใช้ไวยากรณ์ JSON ถูกต้อง ใส่เครื่องหมายคำพูดคู่ " รอบสตริง
+* คีย์ "thinking" ต้องเป็นอาเรย์ของสตริง
+* กำหนดให้หนึ่งสเต็ปต่อหนึ่งสตริง
+* รวม 6- 12 สเต็ป (ยืดหยุ่นตามความซับซ้อน)
+* ห้าม ใส่ “คำตอบสุดท้าย” มีแค่การคิด/วางแผน
+* escape อักขระพิเศษให้ถูกต้องในสตริง
+
+CRITICAL REMINDERS:
+* นี่คือการ คิดเชิงกลยุทธ์ ไม่ใช่การ บรรยายข้อมูล
+* โชว์ วิธี ที่จะวิเคราะห์และวางแผนเพื่อได้ผลลัพธ์ ไม่ใช่ สิ่งที่เห็น
+* ทำการตัดสินใจและอธิบาย เหตุผล
+* ทุกสเต็ปต้อง ใช้สำนวน/โครงสร้างต่างกัน
+* 2- 3 สเต็ปสุดท้าย ต้องสรุป โครงสร้างการนำเสนอ ให้ชัดเจน
+
+EXAMPLE FEW SHOT:
+ตัวอย่างรูปแบบการแสดงวิธีคิดให้ใช้โทนภาษาแบบนี้แต่ห้ามคัดลอกรูปแบบให้สังเคราะห์จากข้อมูลและสถานการณ์จริง
+
+{
+  "thinking": [
+"โอเค ผู้ใช้สั่งให้ [user command] และให้ Preset [preset role/requirement] มาด้วย .. งั้นฉันต้อง [strategic interpretation]",
+"เอาล่ะ ฉันขอเริ่มดูข้อมูลก่อน... อืม โอเค [specific observation] แต่ที่น่าสนใจคือ [key insight] เพราะ [reasoning]",
+"เดียว...ขอฉันหยุดคิดและตรวจสอบให้ดีก่อนถ้า[reasoning]แล้ววิเคราะห์แบบนี้ จะได้ผลลัพธ์ที่ดีที่สุดไหม?"
+"โอเคฉัน[reasoning]แล้ว ได้เป็น [option A] และ [option B] ที่เหมาะสม"
+"คำถาม? ฉันควรใช้ [option A] หรือ [option B]? ถ้า [approach A] จะได้ [outcome A] แต่ [approach B] น่าจะ [reasoning why B is better]",
+"โอเค ดี...ฉันคิดว่าเลือก [option...] ดีที่สุดเพื่อให้ผลลัพธ์มีประสิทธิภาพที่สุด งั้นฉันควรออกแบบโครงสร้างเป็น: 
+1. [section] 
+2. [section] 
+3. [section] 
+เพราะ [reasoning]",
+"โอเค ฉันจะเริ่มส่งคำตอบให้เดียวนี้เลย",
+  ...
+]
+}
+
+EXAMPLE OF BAD THINKING (DO NOT DO THIS):
+
+{
+  "thinking": [
+    "ผู้ใช้ขอวิเคราะห์ข้อมูลความรู้สึกจากช่วงข้อมูล 30 แถว",
+    "ข้อมูลส่วนใหญ่เป็นข้อความสอบถามเกี่ยวกับรถมอเตอร์ไซค์",
+    "สิ่งที่เด่นชัดคือ sentiment ส่วนใหญ่เป็น Neutral"
+  ]
+}
+
+ทำไมถึงแย่:
+- เป็นทางการเกินไป (ผู้ใช้ขอ, ข้อมูลส่วนใหญ่, สิ่งที่เด่นชัด)
+- แค่บรรยายข้อมูล ไม่ได้แสดงการวางแผนกลยุทธ์
+- ไม่มีกระบวนการตัดสินใจ
+- ไม่มีบุคลิกหรือความคิดที่เป็นธรรมชาติ
+- โครงสร้างประโยคซ้ำๆ
+
+ข้อจดจำ:ห้ามใช้คัดลอกรูปแบบวิธีคิดตายตัวหากฝ่าฝืนมีระบบตรวจจับผลลัพธ์นั้นจะใช้ไม่ได้`;
+}
+
+/**
+ * Parse Thinking Response from API
+ * ⭐ UPDATED: Enhanced JSON parsing with better fallback to ensure thinking always displays
+ */
+function parseThinkingResponse(rawResponse) {
+  try {
+    Logger.log('Parsing thinking response...');
+    Logger.log('Raw response length: ' + (rawResponse ? rawResponse.length : 0));
+
+    if (!rawResponse || typeof rawResponse !== 'string') {
+      Logger.log('⚠️ Invalid response type - using fallback thinking');
+      return {
+        thinking: [
+          'เริ่มวิเคราะห์ข้อมูลที่ได้รับ...',
+          'กำลังประมวลผลตามคำสั่ง...',
+          'เตรียมสรุปผลลัพธ์...'
+        ],
+        answer: rawResponse
+      };
+    }
+
+    if (rawResponse.startsWith('ERROR:') || rawResponse.startsWith('❌')) {
+      Logger.log('⚠️ Error message detected - using fallback thinking');
+      return {
+        thinking: [
+          'พบข้อผิดพลาดในการประมวลผล',
+          'กำลังพยายามดำเนินการต่อ...'
+        ],
+        answer: rawResponse
+      };
+    }
+
+    let cleanedResponse = rawResponse.trim();
+
+    // Remove markdown code blocks if present
+    if (cleanedResponse.startsWith('```json')) {
+      cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanedResponse.startsWith('```')) {
+      cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    // Try to extract JSON if there's text before/after
+    const jsonMatch = cleanedResponse.match(/\{[\s\S]*"thinking"[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedResponse = jsonMatch[0];
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanedResponse);
+      Logger.log('✅ JSON parsed successfully');
+    } catch (parseError) {
+      Logger.log('⚠️ JSON parse failed: ' + parseError.message);
+      Logger.log('Response preview: ' + cleanedResponse.substring(0, 200));
+
+      // Better fallback - try to extract thinking from malformed response
+      const thinkingMatch = cleanedResponse.match(/"thinking"\s*:\s*\[([\s\S]*?)\]/);
+      if (thinkingMatch) {
+        Logger.log('Attempting to extract thinking from malformed JSON...');
+        try {
+          const thinkingArray = JSON.parse('[' + thinkingMatch[1] + ']');
+          if (Array.isArray(thinkingArray) && thinkingArray.length > 0) {
+            Logger.log('✅ Extracted thinking from malformed JSON');
+            return {
+              thinking: thinkingArray.slice(0, 15),
+              answer: null
+            };
+          }
+        } catch (e) {
+          Logger.log('Failed to extract thinking: ' + e.message);
+        }
+      }
+
+      return {
+        thinking: [
+          'กำลังวิเคราะห์ข้อมูล...',
+          'ประมวลผลตามคำสั่ง...',
+          'เตรียมนำเสนอผลลัพธ์...'
+        ],
+        answer: rawResponse
+      };
+    }
+
+    // Validate thinking array
+    if (parsed.thinking && Array.isArray(parsed.thinking) && parsed.thinking.length > 0) {
+      Logger.log('✅ Valid thinking response with ' + parsed.thinking.length + ' steps');
+      return {
+        thinking: parsed.thinking.slice(0, 15),
+        answer: parsed.answer || null
+      };
+    }
+
+    Logger.log('⚠️ No valid thinking array found in response - using fallback');
+    return {
+      thinking: [
+        'เริ่มวิเคราะห์ข้อมูล...',
+        'วางแผนการประมวลผล...',
+        'เตรียมสรุปผลการวิเคราะห์...'
+      ],
+      answer: parsed.answer || rawResponse
+    };
+
+  } catch (e) {
+    Logger.log('❌ Error parsing thinking response: ' + e.message);
+    return {
+      thinking: [
+        'กำลังประมวลผลข้อมูล...',
+        'วิเคราะห์ตามคำสั่ง...',
+        'เตรียมแสดงผลลัพธ์...'
+      ],
+      answer: rawResponse
+    };
+  }
+}
+
+/**
+ * Call Thinking API for standard mode
+ * ⭐ UPDATED: Strategic Meta-Planning with strict JSON enforcement
+ */
+function callThinkingAPI(dataInfo, userPrompt, presetSystemMessage, thinkingModel) {
+  try {
+    const thinkingSystemMessage = generateThinkingSystemMessage(presetSystemMessage);
+
+    const payload = {
+      model: thinkingModel || MODEL_CONFIG.thinking.model,
+      messages: [
+        { role: 'system', content: thinkingSystemMessage },
+        { role: 'user', content: `${userPrompt}\n\n${dataInfo}` }
+      ],
+      temperature: 1,  // ⭐ Lowered for more consistent JSON output
+      max_tokens: MODEL_CONFIG.thinking.max_tokens,
+      response_format: { "type": "json_object" }  // ⭐ Enforces JSON response
+    };
+
+    Logger.log('📤 Calling Thinking API with Strategic Meta-Planning system message');
+    const rawResult = makeRealUniverseApiCallWithRetry(payload);
+    return parseThinkingResponse(rawResult);
+
+  } catch (e) {
+    Logger.log('Error in callThinkingAPI: ' + e.message);
+    // Fallback thinking
+    return {
+      thinking: [
+        'เริ่มวิเคราะห์ข้อมูล...',
+        'กำลังประมวลผลตามคำสั่ง...',
+        'เตรียมสรุปผลลัพธ์...'
+      ],
+      answer: null
+    };
+  }
+}
+
+/**
+ * Call Thinking API for turbo mode
+ * ⭐ UPDATED: Strategic Meta-Planning with strict JSON enforcement
+ */
+function callTurboThinkingAPI(dataOverview, userPrompt, presetSystemMessage, thinkingModel) {
+  try {
+    const thinkingSystemMessage = generateThinkingSystemMessage(presetSystemMessage);
+
+    const payload = {
+      model: thinkingModel || MODEL_CONFIG.thinking.model,
+      messages: [
+        { role: 'system', content: thinkingSystemMessage },
+        { role: 'user', content: `${userPrompt}\n\nภาพรวมข้อมูล:\n${dataOverview}` }
+      ],
+      temperature: 0.2,  // ⭐ Lowered for more consistent JSON output
+      max_tokens: MODEL_CONFIG.thinking.max_tokens,
+      response_format: { "type": "json_object" }  // ⭐ Enforces JSON response
+    };
+
+    Logger.log('📤 Calling Turbo Thinking API with Strategic Meta-Planning system message');
+    const rawResult = makeRealUniverseApiCallWithRetry(payload);
+    return parseThinkingResponse(rawResult);
+
+  } catch (e) {
+    Logger.log('Error in callTurboThinkingAPI: ' + e.message);
+    // Fallback thinking
+    return {
+      thinking: [
+        'เริ่มวางแผนกลยุทธ์การวิเคราะห์...',
+        'กำลังวิเคราะห์ภาพรวมข้อมูล...',
+        'เตรียมประมวลผลข้อมูลขนาดใหญ่...'
+      ],
+      answer: null
+    };
+  }
+}
+
+/* ------------------ DYNAMIC PRESET FUNCTIONS ------------------ */
+
+function getDynamicPresets() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Preset');
+
+  if (!sheet) {
+    throw new Error('❌ ไม่พบ Sheet "Preset" โปรดสร้าง Sheet ชื่อ "Preset" ก่อนใช้งาน');
+  }
+
+  try {
+    const presets = {
+      action: {},
+      array: {},
+      image: {}
+    };
+
+    const actionRange = sheet.getRange('A2:B21');
+    const actionValues = actionRange.getValues();
+
+    actionValues.forEach((row, index) => {
+      const [name, systemMessage] = row;
+      if (name && String(name).trim() && systemMessage && String(systemMessage).trim()) {
+        const key = `action_preset_${index + 2}`;
+        presets.action[key] = {
+          SYSTEM_MESSAGE: `Preset!B${index + 2}`,
+          DISPLAY_NAME: String(name).trim(),
+          ROW_NUMBER: index + 2
+        };
+      }
+    });
+
+    const arrayRange = sheet.getRange('D2:E21');
+    const arrayValues = arrayRange.getValues();
+
+    arrayValues.forEach((row, index) => {
+      const [name, systemMessage] = row;
+      if (name && String(name).trim() && systemMessage && String(systemMessage).trim()) {
+        const key = `array_preset_${index + 2}`;
+        presets.array[key] = {
+          SYSTEM_MESSAGE: `Preset!E${index + 2}`,
+          DISPLAY_NAME: String(name).trim(),
+          ROW_NUMBER: index + 2
+        };
+      }
+    });
+
+    const imageRange = sheet.getRange('G2:H21');
+    const imageValues = imageRange.getValues();
+
+    imageValues.forEach((row, index) => {
+      const [name, promptTemplate] = row;
+      if (name && String(name).trim() && promptTemplate && String(promptTemplate).trim()) {
+        const key = `image_preset_${index + 2}`;
+        presets.image[key] = {
+          SYSTEM_MESSAGE: `Preset!H${index + 2}`,
+          DISPLAY_NAME: String(name).trim(),
+          ROW_NUMBER: index + 2
+        };
+      }
+    });
+
+    if (Object.keys(presets.action).length === 0 && Object.keys(presets.array).length === 0) {
+      throw new Error('❌ Sheet "Preset" ว่างเปล่า\n\nโปรดเพิ่มข้อมูล Preset:\n- Action Presets: คอลัมน์ A-B (ชื่อ-คำสั่ง)\n- Array Presets: คอลัมน์ D-E (ชื่อ-คำสั่ง)');
+    }
+
+    Logger.log('Dynamic presets loaded successfully:');
+    Logger.log('Action presets: ' + Object.keys(presets.action).length);
+    Logger.log('Array presets: ' + Object.keys(presets.array).length);
+
+    return presets;
+
+  } catch (e) {
+    if (e.message.includes('❌')) throw e;
+    throw new Error('❌ เกิดข้อผิดพลาดในการอ่าน Sheet "Preset":\n' + e.message);
+  }
+}
+
+function getPresetDescriptionByKey(presetKey) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Preset');
+    if (!sheet) return 'ไม่มีคำอธิบาย';
+
+    if (presetKey.includes('action_preset_')) {
+      const rowNum = presetKey.split('_')[2];
+      const descValue = sheet.getRange(`C${rowNum}`).getValue();
+      if (descValue && String(descValue).trim()) return String(descValue).trim();
+    } else if (presetKey.includes('array_preset_')) {
+      const rowNum = presetKey.split('_')[2];
+      const descValue = sheet.getRange(`F${rowNum}`).getValue();
+      if (descValue && String(descValue).trim()) return String(descValue).trim();
+    } else if (presetKey.includes('image_preset_')) {
+      const rowNum = presetKey.split('_')[2];
+      const descValue = sheet.getRange(`I${rowNum}`).getValue();
+      if (descValue && String(descValue).trim()) return String(descValue).trim();
+    }
+
+    return 'ไม่มีคำอธิบาย';
+  } catch (e) {
+    return 'ไม่สามารถอ่านคำอธิบายได้';
+  }
+}
+/* ------------------ MAIN LIBRARY FUNCTIONS ------------------ */
+function onOpen() {
+  initializeRealUniverse();
+}
+
+function initializeRealUniverse() {
+  const ui = SpreadsheetApp.getUi();
+
+  try {
+    ui.createMenu('◉⃝◉ RealUniverse')
+      .addItem('↗️ Launch AI', 'launchRealUniverseAI')
+      .addSeparator()
+      .addItem('⚙️ Set API Key', 'setupRealUniverseApiKey')
+      .addItem('🗑️ Clear Chat History', 'clearRealUniverseHistory')
+      .addToUi();
+
+  } catch (e) {
+    Logger.log('Error initializing RealUniverse: ' + e.message);
+    ui.alert('Installation Error',
+      'There was an error setting up RealUniverse AI. Please try refreshing the page and running the installation again.',
+      ui.ButtonSet.OK);
+  }
+}
+
+function launchRealUniverseAI() {
+  showRealUniverseChat();
+}
+
+function showRealUniverseChat() {
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const displayMode = 'modeless';
+
+    if (displayMode === 'sidebar') {
+      showRealUniverseSidebar();
+    } else {
+      showRealUniverseModeless();
+    }
+
+  } catch (e) {
+    Logger.log('Error showing chat: ' + e.message);
+    SpreadsheetApp.getUi().alert('Error', 'Could not launch AI interface: ' + e.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function showRealUniverseSidebar() {
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty('REALUNIVERSE_DISPLAY_MODE', 'sidebar');
+
+    const htmlContent = getRealUniverseHtmlContent();
+    const html = HtmlService.createHtmlOutput(htmlContent).setWidth(320);
+
+    SpreadsheetApp.getUi().showSidebar(html.setTitle(' '));
+  } catch (e) {
+    Logger.log('Error showing sidebar: ' + e.message);
+    SpreadsheetApp.getUi().alert('Error', 'Could not launch sidebar: ' + e.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function showRealUniverseModeless() {
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty('REALUNIVERSE_DISPLAY_MODE', 'modeless');
+
+    const htmlContent = getRealUniverseHtmlContent();
+    const html = HtmlService.createHtmlOutput(htmlContent);
+    html.setWidth(SIDEBAR_WIDTH).setHeight(SIDEBAR_HEIGHT);
+
+    SpreadsheetApp.getUi().showModelessDialog(html, ' ');
+  } catch (e) {
+    Logger.log('Error showing modeless: ' + e.message);
+    SpreadsheetApp.getUi().alert('Error', 'Could not launch modeless dialog: ' + e.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function toggleDisplayMode() {
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const currentMode = properties.getProperty('REALUNIVERSE_DISPLAY_MODE') || 'modeless';
+
+    const newMode = currentMode === 'modeless' ? 'sidebar' : 'modeless';
+    properties.setProperty('REALUNIVERSE_DISPLAY_MODE', newMode);
+
+    const ui = SpreadsheetApp.getUi();
+    const emptyHtml = HtmlService.createHtmlOutput('<script>google.script.host.close();</script>');
+
+    if (currentMode === 'modeless') {
+      emptyHtml.setWidth(1).setHeight(1);
+      ui.showModelessDialog(emptyHtml, 'Closing...');
+      Utilities.sleep(150);
+    } else {
+      emptyHtml.setWidth(1);
+      ui.showSidebar(emptyHtml.setTitle('Closing...'));
+      Utilities.sleep(150);
+    }
+
+    const htmlContent = getRealUniverseHtmlContent();
+    const html = HtmlService.createHtmlOutput(htmlContent);
+
+    if (newMode === 'sidebar') {
+      html.setWidth(320);
+      ui.showSidebar(html.setTitle(' '));
+    } else {
+      html.setWidth(SIDEBAR_WIDTH).setHeight(SIDEBAR_HEIGHT);
+      ui.showModelessDialog(html, ' ');
+    }
+
+  } catch (e) {
+    Logger.log('Error toggling display mode: ' + e.message);
+    SpreadsheetApp.getUi().alert('Error', 'Could not switch display mode: ' + e.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+function getCurrentDisplayMode() {
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    return properties.getProperty('REALUNIVERSE_DISPLAY_MODE') || 'modeless';
+  } catch (e) {
+    Logger.log('Error getting display mode: ' + e.message);
+    return 'modeless';
+  }
+}
+
+function setupRealUniverseApiKey() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    'Set OpenAI API Key',
+    'Please enter your OpenAI API key (starts with "sk-"):\n\nYou can get one from: https://platform.openai.com/api-keys',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() == ui.Button.OK) {
+    const apiKey = response.getResponseText().trim();
+    if (apiKey.startsWith('sk-')) {
+      PropertiesService.getScriptProperties().setProperty('REALUNIVERSE_API_KEY', apiKey);
+      ui.alert('Success!', 'Your API Key has been saved securely. You can now use RealUniverse AI!', ui.ButtonSet.OK);
+    } else {
+      ui.alert('Error', 'Invalid API Key format. It must start with "sk-".', ui.ButtonSet.OK);
+    }
+  }
+}
+
+/* ------------------ CORE AI PROCESSING FUNCTIONS ------------------ */
+
+function processRealUniverseAI(prompt, preset, temperature, mode, turboMode, thinkingMode, thinkingModel) {
+  try {
+    if (mode === 'action') {
+      if (turboMode) {
+        return processRealUniverseTurbo(prompt, preset, temperature, thinkingMode, thinkingModel);
+      } else {
+        return processRealUniverseStandard(prompt, preset, temperature, thinkingMode, thinkingModel);
+      }
+    } else if (mode === 'array') {
+      return processRealUniverseArray(prompt, preset, temperature);
+    } else if (mode === 'image') {
+      return processRealUniverseImage(prompt, preset, temperature);
+    }
+
+    throw new Error('Invalid mode specified');
+  } catch (e) {
+    Logger.log('Error in processRealUniverseAI: ' + e.message);
+    return 'ERROR: ' + e.message;
+  }
+}
+
+/**
+ * ⭐ NEW: Process Thinking Phase Only (for parallel API calls)
+ * Returns thinking steps immediately without waiting for answer
+ */
+function processThinkingPhase(prompt, preset, temperature, mode, turboMode, thinkingModel) {
+  try {
+    if (mode !== 'action') {
+      return JSON.stringify({ error: 'Thinking mode only works with Action mode' });
+    }
+
+    // Get data and prepare context (same as processRealUniverseStandard)
+    const systemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+
+    let allDataArray = [];
+    const rangeList = SpreadsheetApp.getActiveRangeList();
+    if (!rangeList) {
+      return JSON.stringify({ error: 'No cells selected' });
+    }
+
+    const ranges = rangeList.getRanges();
+    ranges.forEach(range => {
+      let visibleRowsAndNumbers = getVisibleCellsForActionWithRowNumbers(range);
+      visibleRowsAndNumbers.forEach(item => {
+        const cleanedRow = item.data.map(val => cleanCellData(val));
+        if (cleanedRow.some(val => val !== '')) {
+          allDataArray.push({
+            rowNumber: item.rowNumber,
+            data: cleanedRow
+          });
+        }
+      });
+    });
+
+    const wordCount = allDataArray
+      .map(row => row.data.join(' '))
+      .join(' ')
+      .split(/\s+/)
+      .filter(word => word.length > 0)
+      .length;
+
+    if (wordCount > 20000 && !turboMode) {
+      return JSON.stringify({ error: 'ข้อมูลมีจำนวนมากเกินไป โปรดใช้ 💡 Deep Analysis' });
+    }
+
+    const firstRange = ranges[0];
+    const sheetName = firstRange.getSheet().getName();
+    const rangeNotation = ranges.map(r => r.getA1Notation()).join(', ');
+    const totalCols = firstRange.getNumColumns();
+    const totalRowsVisible = allDataArray.length;
+    const rangeInfo = `Selected Range: ${sheetName}!${rangeNotation} (${totalCols} columns, ${totalRowsVisible} visible rows)`;
+
+    const dataAnalysis = analyzeDataStructure(allDataArray);
+
+    let enhancedPrompt = prompt;
+    if (dataAnalysis.dataType === 'content_only') {
+      enhancedPrompt = formatContentOnlyData(allDataArray, prompt, rangeInfo);
+    } else if (dataAnalysis.dataType === 'mixed_data') {
+      const calculations = performCalculations(allDataArray, dataAnalysis);
+      enhancedPrompt = formatMixedData(allDataArray, calculations, prompt, rangeInfo);
+    }
+
+    const dataInfo = rangeInfo + '\n\n' + enhancedPrompt;
+    const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+
+    Logger.log('=== THINKING PHASE (Separate Call) ===');
+    Logger.log('Using Thinking Model: ' + thinkingModel);
+
+    // Call Thinking API
+    const thinkingResult = callThinkingAPI(dataInfo, prompt, presetSystemMessage, thinkingModel);
+
+    if (thinkingResult.thinking && thinkingResult.thinking.length > 0) {
+      Logger.log('✅ Thinking steps received: ' + thinkingResult.thinking.length);
+      // Return thinking steps as JSON array
+      return JSON.stringify(thinkingResult.thinking);
+    } else {
+      Logger.log('⚠️ No thinking steps received');
+      return JSON.stringify([]);
+    }
+
+  } catch (e) {
+    Logger.log('Error in processThinkingPhase: ' + e.message);
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+/**
+ * ⭐ NEW: Process Answer Phase with Thinking Steps
+ * Returns answer after incorporating thinking steps
+ */
+function processAnswerPhaseWithThinking(prompt, preset, temperature, mode, turboMode, thinkingStepsJson) {
+  try {
+    if (mode !== 'action') {
+      return 'Answer phase only works with Action mode';
+    }
+
+    const thinkingSteps = JSON.parse(thinkingStepsJson);
+
+    // Get data and prepare context (same as before)
+    const systemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+    const config = MODEL_CONFIG.action_standard;
+
+    let allDataArray = [];
+    const rangeList = SpreadsheetApp.getActiveRangeList();
+    if (!rangeList) {
+      return 'No cells selected';
+    }
+
+    const ranges = rangeList.getRanges();
+    ranges.forEach(range => {
+      let visibleRowsAndNumbers = getVisibleCellsForActionWithRowNumbers(range);
+      visibleRowsAndNumbers.forEach(item => {
+        const cleanedRow = item.data.map(val => cleanCellData(val));
+        if (cleanedRow.some(val => val !== '')) {
+          allDataArray.push({
+            rowNumber: item.rowNumber,
+            data: cleanedRow
+          });
+        }
+      });
+    });
+
+    const dataAnalysis = analyzeDataStructure(allDataArray);
+    let enhancedSystemMessage = systemMessage;
+    let enhancedPrompt = prompt;
+
+    const firstRange = ranges[0];
+    const sheetName = firstRange.getSheet().getName();
+    const rangeNotation = ranges.map(r => r.getA1Notation()).join(', ');
+    const totalCols = firstRange.getNumColumns();
+    const totalRowsVisible = allDataArray.length;
+    const rangeInfo = `Selected Range: ${sheetName}!${rangeNotation} (${totalCols} columns, ${totalRowsVisible} visible rows)`;
+
+    if (dataAnalysis.dataType === 'content_only') {
+      enhancedSystemMessage += '\n\nคุณกำลังวิเคราะห์ข้อมูลเนื้อหา/ข้อความ:\n' +
+        '- วิเคราะห์ตาม Preset หลักที่กำหนด\n' +
+        '- ห้ามอ้างอิงเลข Row ที่นำมาวิเคราะห์ในคำตอบเด็ดขาด\n';
+      enhancedPrompt = formatContentOnlyData(allDataArray, prompt, rangeInfo);
+    } else if (dataAnalysis.dataType === 'mixed_data') {
+      const calculations = performCalculations(allDataArray, dataAnalysis);
+      enhancedSystemMessage += '\n\nคุณกำลังวิเคราะห์ข้อมูลแบบผสม (ข้อความ + ตัวเลข):\n' +
+        '- ใช้ผลการคำนวณที่แม่นยำจาก pre-processing\n' +
+        '- วิเคราะห์ตาม Preset หลักที่กำหนด\n' +
+        '- ห้ามอ้างอิงเลข Row ที่นำมาวิเคราะห์ในคำตอบเด็ดขาด\n';
+      enhancedPrompt = formatMixedData(allDataArray, calculations, prompt, rangeInfo);
+    }
+
+    Logger.log('=== ANSWER PHASE (Separate Call) ===');
+    Logger.log('Received thinking steps: ' + thinkingSteps.length);
+
+    // Build answer prompt with thinking steps
+    const thinkingStepsText = thinkingSteps.map((step, i) => `${i + 1}. ${step}`).join('\n');
+
+    const answerSystemMessage = `${enhancedSystemMessage}
+
+⭐ YOUR TASK - EXECUTION PHASE:
+
+You already analyzed and planned in the previous thinking phase.
+
+YOUR THINKING & PLANNING:
+${thinkingStepsText}
+
+Now EXECUTE this plan and provide your FULL, DETAILED answer according to the preset.
+
+CRITICAL REQUIREMENTS:
+- Follow the plan you created above
+- Provide comprehensive, detailed analysis (1200-2000 words)
+- Meet all preset requirements
+- This is your FINAL answer - make it complete and thorough
+- DO NOT repeat the thinking steps in your answer
+- Focus on delivering results, insights, and conclusions`;
+
+    const payload = {
+      model: config.model,
+      messages: [
+        { role: 'system', content: answerSystemMessage },
+        { role: 'user', content: enhancedPrompt }
+      ],
+      temperature: temperature,
+      max_tokens: config.max_tokens
+    };
+
+    const result = makeRealUniverseApiCallWithRetry(payload);
+
+    Logger.log('✅ Answer received');
+    Logger.log('=== END ANSWER PHASE ===');
+
+    saveRealUniverseHistory(prompt + ' (Smart + Thinking)', result);
+    return result;
+
+  } catch (e) {
+    Logger.log('Error in processAnswerPhaseWithThinking: ' + e.message);
+    return 'ERROR: ' + e.message;
+  }
+}
+
+function isNumeric(value) {
+  if (value == null || value === '') return false;
+  const cleanedValue = String(value).replace(/,/g, '');
+  return !isNaN(cleanedValue) && !isNaN(parseFloat(cleanedValue));
+}
+
+function processRealUniverseStandard(prompt, preset, temperature, thinkingMode, thinkingModel) {
+  const systemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+  const config = MODEL_CONFIG.action_standard;
+
+  let allDataArray = [];
+  const rangeList = SpreadsheetApp.getActiveRangeList();
+  if (!rangeList) {
+    const errorMessage = 'No cells selected';
+    saveRealUniverseHistory(prompt, errorMessage);
+    return errorMessage;
+  }
+
+  const ranges = rangeList.getRanges();
+
+  ranges.forEach(range => {
+    let visibleRowsAndNumbers = getVisibleCellsForActionWithRowNumbers(range);
+    visibleRowsAndNumbers.forEach(item => {
+      const cleanedRow = item.data.map(val => cleanCellData(val));
+      if (cleanedRow.some(val => val !== '')) {
+        allDataArray.push({
+          rowNumber: item.rowNumber,
+          data: cleanedRow
+        });
+      }
+    });
+  });
+
+  const wordCount = allDataArray
+    .map(row => row.data.join(' '))
+    .join(' ')
+    .split(/\s+/)
+    .filter(word => word.length > 0)
+    .length;
+
+  if (wordCount > 20000) {
+    const errorMessage = 'ข้อมูลมีจำนวนมากเกินไป โปรดใช้ 💡 Deep Analysis';
+    saveRealUniverseHistory(prompt, errorMessage);
+    return errorMessage;
+  }
+
+  const firstRange = ranges[0];
+  const sheetName = firstRange.getSheet().getName();
+  const rangeNotation = ranges.map(r => r.getA1Notation()).join(', ');
+  const totalCols = firstRange.getNumColumns();
+  const totalRowsVisible = allDataArray.length;
+  const rangeInfo = `Selected Range: ${sheetName}!${rangeNotation} (${totalCols} columns, ${totalRowsVisible} visible rows)`;
+
+  const dataAnalysis = analyzeDataStructure(allDataArray);
+
+  let enhancedPrompt = prompt;
+  let enhancedSystemMessage = systemMessage;
+
+  if (dataAnalysis.dataType === 'content_only') {
+    enhancedSystemMessage += '\n\nคุณกำลังวิเคราะห์ข้อมูลเนื้อหา/ข้อความ:\n' +
+      '- วิเคราะห์ตาม Preset หลักที่กำหนด\n' +
+      '- ห้ามอ้างอิงเลข Row ที่นำมาวิเคราะห์ในคำตอบเด็ดขาด\n';
+
+    enhancedPrompt = formatContentOnlyData(allDataArray, prompt, rangeInfo);
+
+  } else if (dataAnalysis.dataType === 'mixed_data') {
+    const calculations = performCalculations(allDataArray, dataAnalysis);
+
+    enhancedSystemMessage += '\n\nคุณกำลังวิเคราะห์ข้อมูลแบบผสม (ข้อความ + ตัวเลข):\n' +
+      '- ใช้ผลการคำนวณที่แม่นยำจาก pre-processing\n' +
+      '- วิเคราะห์ตาม Preset หลักที่กำหนด\n' +
+      '- ห้ามอ้างอิงเลข Row ที่นำมาวิเคราะห์ในคำตอบเด็ดขาด\n';
+
+    enhancedPrompt = formatMixedData(allDataArray, calculations, prompt, rangeInfo);
+  }
+
+if (thinkingMode) {
+    const dataInfo = rangeInfo + '\n\n' + enhancedPrompt;
+    const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'action'), 'action');
+
+    Logger.log('=== THINKING MODE (NEW) ===');
+    Logger.log('API Call #1: Thinking...');
+    Logger.log('Using Thinking Model: ' + thinkingModel);
+
+    // ⭐ API Call #1: Thinking (with Preset Context)
+    const thinkingResult = callThinkingAPI(dataInfo, prompt, presetSystemMessage, thinkingModel);
+
+    if (thinkingResult.thinking && thinkingResult.thinking.length > 0) {
+      Logger.log('✅ Thinking steps received: ' + thinkingResult.thinking.length);
+
+      // ⭐ API Call #2: Answer (Execute Plan)
+      Logger.log('API Call #2: Answer...');
+
+      const thinkingStepsText = thinkingResult.thinking.map((step, i) => `${i + 1}. ${step}`).join('\n');
+
+      const answerSystemMessage = `${enhancedSystemMessage}
+
+⭐ YOUR TASK - EXECUTION PHASE:
+
+You already analyzed and planned in the previous thinking phase.
+
+YOUR THINKING & PLANNING:
+${thinkingStepsText}
+
+Now EXECUTE this plan and provide your FULL, DETAILED answer according to the preset.
+
+CRITICAL REQUIREMENTS:
+- Follow the plan you created above
+- Provide comprehensive, detailed analysis (1200-2000 words)
+- Meet all preset requirements
+- This is your FINAL answer - make it complete and thorough
+- DO NOT repeat the thinking steps in your answer
+- Focus on delivering results, insights, and conclusions`;
+
+      const payload = {
+        model: config.model,
+        messages: [
+          { role: 'system', content: answerSystemMessage },
+          { role: 'user', content: enhancedPrompt }
+        ],
+        temperature: temperature,
+        max_tokens: config.max_tokens
+      };
+
+      const result = makeRealUniverseApiCallWithRetry(payload);
+
+      Logger.log('✅ Final Answer received');
+      Logger.log('=== END THINKING MODE ===');
+
+      saveRealUniverseHistory(prompt + ' (Smart + Thinking)', result);
+
+      // Return JSON with both thinking and answer
+      return JSON.stringify({
+        thinking: thinkingResult.thinking,
+        answer: result
+      });
+
+    } else {
+      // Fallback: No thinking available, use standard mode
+      Logger.log('⚠️ No thinking steps, falling back to standard mode');
+      const payload = {
+        model: config.model,
+        messages: [
+          { role: 'system', content: enhancedSystemMessage },
+          { role: 'user', content: enhancedPrompt }
+        ],
+        temperature: temperature,
+        max_tokens: config.max_tokens
+      };
+
+      const result = makeRealUniverseApiCallWithRetry(payload);
+      saveRealUniverseHistory(prompt + ' (Smart)', result);
+      return result;
+    }
+
+  } else {
+    const payload = {
+      model: config.model,
+      messages: [
+        { role: 'system', content: enhancedSystemMessage },
+        { role: 'user', content: enhancedPrompt }
+      ],
+      temperature: temperature,
+      max_tokens: config.max_tokens
+    };
+
+    const result = makeRealUniverseApiCallWithRetry(payload);
+    saveRealUniverseHistory(prompt + ' (Smart)', result);
+    return result;
+  }
+}
+
+function getDynamicPresetSystemMessage(presetKey, mode) {
+  try {
+    const presets = getDynamicPresets();
+    const modePresets = presets[mode] || {};
+
+    if (modePresets[presetKey]) {
+      return modePresets[presetKey].SYSTEM_MESSAGE;
+    }
+
+    const firstKey = Object.keys(modePresets)[0];
+    if (firstKey) return modePresets[firstKey].SYSTEM_MESSAGE;
+
+    throw new Error('No presets available for mode: ' + mode);
+  } catch (e) {
+    Logger.log('Error getting dynamic preset: ' + e.message);
+    throw e;
+  }
+}
+
+function analyzeDataStructure(dataArray) {
+  if (!dataArray || dataArray.length === 0) {
+    return { dataType: 'empty', columns: [] };
+  }
+
+  const sampleRow = dataArray[0].data;
+  const columnAnalysis = [];
+
+  for (let colIndex = 0; colIndex < sampleRow.length; colIndex++) {
+    const columnValues = dataArray.map(row => row.data[colIndex]).filter(val => val !== '');
+    if (columnValues.length === 0) continue;
+
+    const numericValues = columnValues.filter(val => isNumeric(val));
+    const uniqueValues = [...new Set(columnValues)];
+
+    const numericRatio = numericValues.length / columnValues.length;
+    const hasDuplicates = uniqueValues.length < columnValues.length;
+    const duplicateRatio = hasDuplicates ? (columnValues.length - uniqueValues.length) / columnValues.length : 0;
+
+    const analysis = {
+      index: colIndex,
+      type: 'unknown',
+      hasNumbers: numericValues.length > 0,
+      isNumeric: numericRatio > 0.8,
+      isCategory: hasDuplicates && uniqueValues.length >= 2 && uniqueValues.length <= 20 && duplicateRatio > 0.2,
+      isText: numericRatio < 0.3,
+      uniqueCount: uniqueValues.length,
+      totalCount: columnValues.length
+    };
+
+    if (analysis.isNumeric)      analysis.type = 'number';
+    else if (analysis.isCategory) analysis.type = 'category';
+    else if (analysis.isText)     analysis.type = 'text';
+    else                          analysis.type = 'mixed';
+
+    columnAnalysis.push(analysis);
+  }
+
+  const hasNumbers = columnAnalysis.some(col => col.type === 'number');
+  const hasCategories = columnAnalysis.some(col => col.type === 'category');
+  const hasText = columnAnalysis.some(col => col.type === 'text');
+
+  let dataType = 'content_only';
+  if (hasNumbers && (hasCategories || hasText)) dataType = 'mixed_data';
+
+  return {
+    dataType: dataType,
+    columns: columnAnalysis,
+    totalRows: dataArray.length,
+    numberColumns: columnAnalysis.filter(col => col.type === 'number'),
+    categoryColumns: columnAnalysis.filter(col => col.type === 'category'),
+    textColumns: columnAnalysis.filter(col => col.type === 'text'),
+    mixedColumns: columnAnalysis.filter(col => col.type === 'mixed')
+  };
+}
+
+function formatContentOnlyData(dataArray, userPrompt, rangeInfo) {
+  const contentText = dataArray.map(row =>
+    `Row ${row.rowNumber}: ${row.data.filter(val => val !== '').join(' | ')}`
+  ).join('\n');
+
+  return `${userPrompt}\n\n${rangeInfo}\n\nเนื้อหาที่ต้องวิเคราะห์:\n${contentText}`;
+}
+
+function performCalculations(dataArray, analysis) {
+  const calculations = { summary: {}, groups: {}, totals: {} };
+
+  try {
+    analysis.numberColumns.forEach(numCol => {
+      const values = dataArray
+        .map(row => row.data[numCol.index])
+        .filter(val => isNumeric(val))
+        .map(val => parseFloat(String(val).replace(/,/g, '')));
+      calculations.totals[`column_${numCol.index}`] = {
+        sum: values.reduce((sum, val) => sum + val, 0),
+        count: values.length
+      };
+    });
+
+    analysis.categoryColumns.forEach(catCol => {
+      analysis.numberColumns.forEach(numCol => {
+        const groupKey = `${catCol.index}_to_${numCol.index}`;
+        const groups = {};
+
+        dataArray.forEach(row => {
+          const category = row.data[catCol.index];
+          const value = row.data[numCol.index];
+          if (category && isNumeric(value)) {
+            if (!groups[category]) groups[category] = [];
+            groups[category].push(parseFloat(String(value).replace(/,/g, '')));
+          }
+        });
+
+        const groupSummaries = {};
+        Object.keys(groups).forEach(category => {
+          const values = groups[category];
+          groupSummaries[category] = {
+            sum: values.reduce((sum, val) => sum + val, 0),
+            count: values.length
+          };
+        });
+
+        calculations.groups[groupKey] = groupSummaries;
+      });
+    });
+
+  } catch (e) {
+    Logger.log('Error in calculations: ' + e.message);
+    calculations.error = 'Could not complete all calculations';
+  }
+
+  return calculations;
+}
+
+function formatMixedData(dataArray, calculations, userPrompt, rangeInfo) {
+  const rawDataText = dataArray.map(row => `Row ${row.rowNumber}: ${row.data.join(', ')}`).join('\n');
+
+  let calculationsText = '\nผลการคำนวณ (Pre-calculated Results):\n';
+
+  if (Object.keys(calculations.totals).length > 0) {
+    calculationsText += '\nผลรวมแต่ละคอลัมน์:\n';
+    Object.entries(calculations.totals).forEach(([key, data]) => {
+      calculationsText += `- คอลัมน์ ${key}: รวม ${data.sum.toLocaleString()} จาก ${data.count} รายการ\n`;
+    });
+  }
+
+  if (Object.keys(calculations.groups).length > 0) {
+    calculationsText += '\nผลรวมแต่ละกลุ่ม:\n';
+    Object.entries(calculations.groups).forEach(([groupKey, groupData]) => {
+      calculationsText += `\nการจัดกลุ่ม ${groupKey}:\n`;
+      Object.entries(groupData).forEach(([category, data]) => {
+        calculationsText += `- ${category}: รวม ${data.sum.toLocaleString()} จาก ${data.count} รายการ\n`;
+      });
+    });
+  }
+
+  return `${userPrompt}\n\n${rangeInfo}\n\nข้อมูลดิบ:\n${rawDataText}${calculationsText}\n\nคำสั่ง: ใช้ผลการคำนวณข้างต้นในการวิเคราะห์และตอบคำถามอย่างแม่นยำ`;
+}
+
+function processRealUniverseTurbo(userPrompt, presetName, temperature, thinkingMode, thinkingModel) {
+  const reduceSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(presetName, 'action'), 'action');
+  const config = MODEL_CONFIG.action_turbo;
+
+  const rangeList = SpreadsheetApp.getActiveRangeList();
+  if (!rangeList) throw new Error('No cells selected.');
+
+  const ranges = rangeList.getRanges();
+  const firstRange = ranges[0];
+  const sheetName = firstRange.getSheet().getName();
+  const rangeNotation = ranges.map(r => r.getA1Notation()).join(', ');
+
+  let allDataLines = [];
+
+  ranges.forEach(range => {
+    const visibleValuesAndRows = getVisibleCellsForActionWithRowNumbers(range);
+    visibleValuesAndRows.forEach(item => {
+      const processedRow = item.data.map(val => cleanCellData(val)).filter(val => val !== '').join(', ');
+      if (processedRow) allDataLines.push(`Row ${item.rowNumber}: ${processedRow}`);
+    });
+  });
+
+  const totalRowsVisible = allDataLines.length;
+  const totalCols = firstRange.getNumColumns();
+  const rangeInfo = `Selected Range: ${sheetName}!${rangeNotation} (${totalCols} columns, ${totalRowsVisible} visible rows)`;
+
+  if (totalRowsVisible > MAX_TOTAL_ROWS_TURBO)
+    throw new Error('จำนวนแถวที่มองเห็นได้เกินขีดจำกัด: ' + totalRowsVisible + ' > ' + MAX_TOTAL_ROWS_TURBO);
+
+  let strategicThinkingResult = null;
+  let strategicThinkingSteps = null;
+
+  if (thinkingMode) {
+    const dataOverview = `${rangeInfo}\n\nTotal data lines: ${totalRowsVisible}\n\nSample data (first 10 rows):\n${allDataLines.slice(0, 10).join('\n')}`;
+    const presetSystemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(presetName, 'action'), 'action');
+
+    Logger.log('Using Thinking Model: ' + thinkingModel);
+    // ⭐ API Call #1: Strategic Thinking (with Preset Context)
+    strategicThinkingResult = callTurboThinkingAPI(dataOverview, userPrompt, presetSystemMessage, thinkingModel);
+
+    if (strategicThinkingResult.thinking && strategicThinkingResult.thinking.length > 0) {
+      strategicThinkingSteps = strategicThinkingResult.thinking.map((step, i) => `${i + 1}. ${step}`).join('\n');
+    }
+  }
+
+  const mapSystemMessage = thinkingMode && strategicThinkingSteps
+    ? 'data analysis assistant specialized in processing large datasets.\n' +
+      'STRATEGIC PLAN:\n' + strategicThinkingSteps + '\n\n' +
+      'DATA CONTEXT: ' + rangeInfo + '\n' +
+      'USER REQUEST: "' + userPrompt + '"\n' +
+      'Follow the strategic plan above. Extract and summarize information from data chunks.\n' +
+      'Data format: Row <number>: value1, value2, value3\n' +
+      'Return JSON format: { "row": "<start-end>", "chunk": <number>, "summary": "<focused_summary>" }\n' +
+      'Requirements:\n- Summary in Thai\n- 700-800 words\n- Focus only on relevant information'
+    : 'data analysis assistant specializing in processing large datasets in chunks.\n' +
+      'DATA CONTEXT: ' + rangeInfo + '\n' +
+      'USER REQUEST: "' + userPrompt + '"\n' +
+      'Extract and summarize information from data chunks relevant to the user request.\n' +
+      'Data format: Row <number>: value1, value2, value3\n' +
+      'Return JSON format: { "row": "<start-end>", "chunk": <number>, "summary": "<focused_summary>" }\n' +
+      'Requirements:\n- Summary in Thai\n- 700-800 words\n- Focus only on relevant information';
+
+  const dataChunks = chunkDataByCharLimit(allDataLines, TURBO_CHUNK_CHAR_LIMIT_ACTION);
+  const summaries = [];
+
+  for (let i = 0; i < dataChunks.length; i++) {
+    const chunk = dataChunks[i];
+    if (!chunk || chunk.trim() === '') continue;
+
+    const chunkRowCount = chunk.split('\n').length;
+
+    const chunkContent = thinkingMode && strategicThinkingSteps
+      ? `[STRATEGIC PLAN]\n${strategicThinkingSteps}\n\n[CURRENT CHUNK]\nChunk ${i + 1}/${dataChunks.length}\n\n${chunk}\n\n[TASK]\nตามแผนกลยุทธ์ข้างต้น ให้วิเคราะห์ข้อมูลส่วนนี้และสรุปประเด็นสำคัญที่เกี่ยวข้องกับ: "${userPrompt}"`
+      : 'ข้อมูลส่วนหนึ่งของการวิเคราะห์: "' + userPrompt + '"\nChunk ' + (i + 1) + '/' + dataChunks.length + ' (' + chunkRowCount + ' rows):\n' + chunk;
+
+    const payload = {
+      model: config.model,
+      messages: [
+        { role: 'system', content: mapSystemMessage },
+        { role: 'user', content: chunkContent }
+      ],
+      temperature: temperature,
+      max_tokens: 4096,
+      response_format: { "type": "json_object" }
+    };
+
+    try {
+      const result = makeRealUniverseApiCallWithRetry(payload);
+      const summary = JSON.parse(result);
+      summaries.push(summary);
+    } catch (e) {
+      summaries.push({ row: (i + 1).toString(), chunk: i + 1, summary: 'Failed to process chunk' });
+    }
+  }
+
+  const combinedSummaries = JSON.stringify(summaries, null, 2);
+
+  const finalContent = thinkingMode && strategicThinkingSteps
+    ? 'STRATEGIC PLAN:\n' + strategicThinkingSteps + '\n\nBased on these summaries:\n\n' + combinedSummaries + '\n\nAnswer the user request: "' + userPrompt + '"'
+    : 'Based on these summaries:\n\n' + combinedSummaries + '\n\nAnswer the user request: "' + userPrompt + '"';
+
+  const finalPayload = {
+    model: config.model,
+    messages: [
+      { role: 'system', content: reduceSystemMessage + '\n\nADDITIONAL CONTEXT: You are analyzing summaries from multiple data chunks. Combine insights from all chunks to create a comprehensive big picture analysis.\n\nRESPONSE REQUIREMENTS:\n- Provide detailed analysis with specific examples and numbers\n- Answer must be between 1000-1500 words\n- Include comprehensive insights from all data chunks\n\n- เริ่มตอบด้วย "🤓 ได้เลยครับตามที่คุณต้องการให้ [คำสั่ง]" และจบด้วย "หวังว่าข้อมูลนี้จะตอบโจทย์ที่ต้องการนะครับ😊"' },
+      { role: 'user', content: finalContent }
+    ],
+    temperature: temperature,
+    max_tokens: config.max_tokens
+  };
+
+  const result = makeRealUniverseApiCallWithRetry(finalPayload);
+  saveRealUniverseHistory(userPrompt + ' (Turbo)', result);
+
+  if (thinkingMode && strategicThinkingResult && strategicThinkingResult.thinking) {
+    return JSON.stringify({
+      thinking: strategicThinkingResult.thinking,
+      answer: result
+    });
+  } else {
+    return result;
+  }
+}
+
+function getSheetRowMetadata(sheet) {
+  const spreadsheetId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  const sheetName = sheet.getName();
+  try {
+    const response = Sheets.Spreadsheets.get(spreadsheetId, {
+      ranges: [sheetName],
+      fields: 'sheets.properties,sheets.data.rowMetadata'
+    });
+    const sheetData = response.sheets && response.sheets.length > 0 ? response.sheets[0] : null;
+    return sheetData && sheetData.data && sheetData.data.length > 0 ? sheetData.data[0].rowMetadata : [];
+  } catch (e) {
+    Logger.log('Error fetching sheet row metadata from Sheets API: ' + e.message);
+    return [];
+  }
+}
+
+function hasHiddenRowsInRange(range) {
+  const sheet = range.getSheet();
+  const rowMetadata = getSheetRowMetadata(sheet);
+
+  if (!rowMetadata || rowMetadata.length === 0) {
+    const filter = sheet.getFilter();
+    if (!filter) return false;
+    const startRow = range.getRow();
+    const numRows = range.getNumRows();
+    try {
+      for (let i = 0; i < numRows; i++) {
+        const actualRowNumber = startRow + i;
+        if (sheet.isRowHiddenByFilter(actualRowNumber) || sheet.isRowHiddenByUser(actualRowNumber)) {
+          return true;
+        }
+      }
+    } catch (e) {
+      Logger.log('Fallback check for hidden rows failed: ' + e.message);
+      return false;
+    }
+    return false;
+  }
+
+  const startRow = range.getRow();
+  const numRows = range.getNumRows();
+
+  for (let i = 0; i < numRows; i++) {
+    const actualRowIndexInMetadata = startRow + i - 1;
+    if (actualRowIndexInMetadata >= 0 && actualRowIndexInMetadata < rowMetadata.length) {
+      if (rowMetadata[actualRowIndexInMetadata].hiddenByFilter || rowMetadata[actualRowIndexInMetadata].hiddenByUser) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function convertToScatteredSelection(range) {
+  const sheet = range.getSheet();
+  const startRow = range.getRow();
+  const numRows = range.getNumRows();
+
+  let visibleCells = [];
+  const allValuesInSelectedRange = range.getValues();
+  const rowMetadata = getSheetRowMetadata(sheet);
+
+  for (let i = 0; i < numRows; i++) {
+    const actualRowNumber = startRow + i;
+    const actualRowIndexInMetadata = actualRowNumber - 1;
+
+    if (actualRowIndexInMetadata >= 0 && actualRowIndexInMetadata < rowMetadata.length &&
+        !(rowMetadata[actualRowIndexInMetadata].hiddenByFilter || rowMetadata[actualRowIndexInMetadata].hiddenByUser)) {
+
+      const rowData = allValuesInSelectedRange[i];
+      const cleanedCells = rowData.map(val => cleanCellData(val)).filter(val => val !== '');
+      const processedRow = cleanedCells.join(' | ');
+      if (processedRow !== '') visibleCells.push({ rowNumber: actualRowNumber, data: processedRow });
+    }
+  }
+
+  return visibleCells;
+}
+
+function getVisibleCellsOnly(ranges) {
+  let visibleData = [];
+
+  ranges.forEach(range => {
+    if (hasHiddenRowsInRange(range)) {
+      const scatteredCells = convertToScatteredSelection(range);
+      visibleData = visibleData.concat(scatteredCells);
+    } else {
+      const values = range.getValues();
+      const startRow = range.getRow();
+
+      values.forEach((row, rowIndex) => {
+        const actualRowNumber = startRow + rowIndex;
+        const cleanedCells = row.map(cellValue => cleanCellData(cellValue)).filter(cleanValue => cleanValue !== '');
+        const processedRow = cleanedCells.join(' | ');
+        if (processedRow !== '') visibleData.push({ rowNumber: actualRowNumber, data: processedRow });
+      });
+    }
+  });
+
+  return visibleData;
+}
+
+function getVisibleCellsForActionWithRowNumbers(range) {
+  const sheet = range.getSheet();
+  const rowMetadata = getSheetRowMetadata(sheet);
+
+  let hasActiveFilterOrHiddenRows = false;
+  if (rowMetadata && rowMetadata.length > 0) {
+    for (let i = 0; i < rowMetadata.length; i++) {
+      if (rowMetadata[i].hiddenByFilter || rowMetadata[i].hiddenByUser) {
+        hasActiveFilterOrHiddenRows = true;
+        break;
+      }
+    }
+  }
+
+  const startRow = range.getRow();
+  const numRows = range.getNumRows();
+  const allValuesInSelectedRange = range.getValues();
+
+  let visibleRowsAndNumbers = [];
+
+  if (!hasActiveFilterOrHiddenRows) {
+    for (let i = 0; i < numRows; i++) {
+      visibleRowsAndNumbers.push({
+        data: allValuesInSelectedRange[i],
+        rowNumber: startRow + i
+      });
+    }
+    return visibleRowsAndNumbers;
+  }
+
+  for (let i = 0; i < numRows; i++) {
+    const actualRowNumber = startRow + i;
+    const actualRowIndexInMetadata = actualRowNumber - 1;
+
+    if (actualRowIndexInMetadata >= 0 && actualRowIndexInMetadata < rowMetadata.length &&
+        !(rowMetadata[actualRowIndexInMetadata].hiddenByFilter || rowMetadata[actualRowIndexInMetadata].hiddenByUser)) {
+      visibleRowsAndNumbers.push({
+        data: allValuesInSelectedRange[i],
+        rowNumber: actualRowNumber
+      });
+    }
+  }
+  return visibleRowsAndNumbers;
+}
+
+function processRealUniverseArray(prompt, preset, temperature) {
+  try {
+    const systemMessage = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'array'), 'array');
+    const config = MODEL_CONFIG.array;
+    const rangeList = SpreadsheetApp.getActiveRangeList();
+    if (!rangeList) return [['ไม่มีเซลล์ที่เลือก']];
+
+    const ranges = rangeList.getRanges();
+    if (ranges.length === 0) return [['ไม่มีข้อมูลให้วิเคราะห์']];
+
+    const ui = SpreadsheetApp.getUi();
+    const userResponse = ui.prompt("ระบุคอลัมน์ที่ต้องการให้เขียนผลลัพธ์ (ตัวอักษร เช่น D):");
+    if (userResponse.getSelectedButton() !== ui.Button.OK) return [['ยกเลิกการทำงาน']];
+
+    const targetCol = convertToColumnNumber(userResponse.getResponseText());
+    if (!targetCol || isNaN(targetCol)) {
+      ui.alert("คอลัมน์ไม่ถูกต้อง");
+      return [['คอลัมน์ไม่ถูกต้อง']];
+    }
+
+    let sheetRef = ranges[0].getSheet();
+
+    let allRowsData = getVisibleCellsOnly(ranges);
+
+    if (allRowsData.length === 0) return [['ไม่มีข้อมูลให้วิเคราะห์']];
+    if (allRowsData.length > MAX_TOTAL_ROWS_ARRAY) {
+      return [['จำนวนแถวมากเกินไป (เกิน ' + MAX_TOTAL_ROWS_ARRAY + ' แถว)']];
+    }
+
+    const batchSize = Math.min(MAX_ROWS_PER_BATCH_ARRAY, allRowsData.length);
+    const numBatches = Math.ceil(allRowsData.length / batchSize);
+    const allResults = new Array(allRowsData.length).fill('ไม่สามารถวิเคราะห์ได้');
+
+    for (let batchIndex = 0; batchIndex < numBatches; batchIndex++) {
+      const startIndex = batchIndex * batchSize;
+      const endIndex = Math.min(startIndex + batchSize, allRowsData.length);
+      const currentBatch = allRowsData.slice(startIndex, endIndex);
+
+      const batchDataForAI = currentBatch.map(item => 'แถวที่ ' + item.rowNumber + ': ' + item.data).join('\n');
+
+      const enhancedSystemMessage = systemMessage + '\n\nReturn JSON array format: [{"row": <number>, "result": "<analysis_result>"}]\nMust have exactly ' + currentBatch.length + ' results.';
+
+      const content = prompt + '\n\nข้อมูลที่ต้องวิเคราะห์:\n' + batchDataForAI + '\n\nReturn JSON array with ' + currentBatch.length + ' results.';
+
+      const payload = {
+        model: config.model,
+        messages: [
+          { role: 'system', content: enhancedSystemMessage },
+          { role: 'user', content: content }
+        ],
+        temperature: temperature,
+        max_tokens: config.max_tokens
+      };
+
+      try {
+        const rawResult = makeRealUniverseApiCall(payload);
+        let cleanedResponse = rawResult.trim();
+
+        if (cleanedResponse.startsWith('```json')) {
+          cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        }
+
+        const batchResults = JSON.parse(cleanedResponse);
+
+        batchResults.forEach(item => {
+          const originalItemIndex = allRowsData.findIndex(data => data.rowNumber === item.row);
+          if (originalItemIndex !== -1) {
+            allResults[originalItemIndex] = item.result || 'ไม่สามารถวิเคราะห์ได้';
+          }
+        });
+
+      } catch (e) {
+        currentBatch.forEach(item => {
+          const originalItemIndex = allRowsData.findIndex(data => data.rowNumber === item.rowNumber);
+          if (originalItemIndex !== -1) {
+            allResults[originalItemIndex] = 'ข้อผิดพลาด: ไม่สามารถประมวลผลได้';
+          }
+        });
+        Logger.log(`Error processing batch: ${e.message}`);
+      }
+
+      currentBatch.forEach(item => {
+        const originalItemIndex = allRowsData.findIndex(data => data.rowNumber === item.rowNumber);
+        if (originalItemIndex !== -1) {
+          try {
+            const targetCell = sheetRef.getRange(item.rowNumber, targetCol, 1, 1);
+            targetCell.setValue(allResults[originalItemIndex]);
+          } catch (e) {
+            Logger.log('Error writing to cell ' + item.rowNumber + ', ' + targetCol + ': ' + e.message);
+          }
+        }
+      });
+
+      SpreadsheetApp.flush();
+      if (batchIndex < numBatches - 1) Utilities.sleep(500);
+    }
+
+    return [['ผลลัพธ์ถูกเขียนในคอลัมน์ที่คุณระบุ (จำนวน ' + allRowsData.length + ' แถว)']];
+
+  } catch (error) {
+    Logger.log('Error in processRealUniverseArray: ' + error.toString());
+    return [['ข้อผิดพลาด: ' + error.toString()]];
+  }
+}
+
+function processRealUniverseImage(prompt, preset, temperature) {
+  try {
+    const config = MODEL_CONFIG.image;
+
+    let contextData = '';
+    const rangeList = SpreadsheetApp.getActiveRangeList();
+    if (rangeList) {
+      const ranges = rangeList.getRanges();
+      ranges.forEach(range => {
+        const values = range.getValues();
+        values.forEach(row => {
+          const cellText = row.filter(cell => cell !== '').join(' ');
+          if (cellText) contextData += cellText + ' ';
+        });
+      });
+    }
+
+    const promptTemplate = getRealUniverseSystemMessage(getDynamicPresetSystemMessage(preset, 'image'), 'image');
+
+    const analysisPayload = {
+      model: 'gpt-4.1',
+      messages: [
+        { role: 'system', content: promptTemplate },
+        { role: 'user', content: `วิเคราะห์และสร้าง detailed prompt จากเนื้อหา: "${contextData.trim()}"` }
+      ],
+      temperature: temperature,
+      max_tokens: 2000
+    };
+
+    const detailedPrompt = makeRealUniverseApiCall(analysisPayload);
+
+    const imagePayload = {
+      model: config.model,
+      prompt: detailedPrompt,
+      size: config.size,
+      quality: config.quality,
+      n: config.n
+    };
+
+    const result = makeRealUniverseImageApiCall(imagePayload);
+
+    const combinedPrompt = contextData ? `${prompt}: ${contextData.trim()}` : prompt;
+
+    const downloadUrl = insertImageToSheet(result.imageUrl, combinedPrompt);
+
+    if (downloadUrl) {
+      const message = `🎨 ภาพถูกสร้างเรียบร้อยแล้ว!\n\n📥 ดาวน์โหลด: ${downloadUrl}`;
+      saveRealUniverseHistory(prompt + ' (Smart Image)', message);
+      return message;
+    } else {
+      throw new Error('ไม่สามารถแทรกภาพในชีตได้');
+    }
+
+  } catch (error) {
+    Logger.log('Error in processRealUniverseImage: ' + error.toString());
+    return 'ข้อผิดพลาดในการสร้างภาพ: ' + error.toString();
+  }
+}
+/* ------------------ API AND HELPER FUNCTIONS ------------------ */
+
+function getApiTypeForModel(modelName) {
+  if (!modelName) return 'chat';
+  const m = String(modelName).toLowerCase();
+
+  const isGpt5 = m.startsWith('gpt-5');
+  const isCodexMini = m.includes('codex-mini');
+  const isOseries = m.startsWith('o');
+  const isGpt5Codex = m.includes('gpt-5-codex');
+
+  if (isGpt5 || isCodexMini || isOseries || isGpt5Codex) return 'responses';
+  return 'chat';
+}
+
+function buildRequestBodyForApi(apiType, payload) {
+  const { model, messages, temperature, max_tokens, response_format } = payload || {};
+  if (apiType === 'responses') {
+    const body = {
+      model: model,
+      input: messages
+    };
+    if (typeof max_tokens !== 'undefined') {
+      body.max_output_tokens = max_tokens;
+    }
+    if (response_format) {
+      body.response_format = response_format;
+    }
+    return body;
+  } else {
+    const body = {
+      model: model,
+      messages: messages
+    };
+    if (typeof temperature !== 'undefined') {
+      body.temperature = temperature;
+    }
+    if (typeof max_tokens !== 'undefined') {
+      body.max_tokens = max_tokens;
+    }
+    if (response_format) {
+      body.response_format = response_format;
+    }
+    return body;
+  }
+}
+
+function extractTextFromApiResponse(apiType, resJson) {
+  try {
+    if (apiType === 'responses') {
+      if (typeof resJson.output_text === 'string' && resJson.output_text.trim() !== '') {
+        return resJson.output_text.trim();
+      }
+      if (Array.isArray(resJson.output)) {
+        const texts = [];
+        resJson.output.forEach(part => {
+          if (part && Array.isArray(part.content)) {
+            part.content.forEach(c => {
+              if (c && typeof c.text === 'string') texts.push(c.text);
+            });
+          }
+        });
+        if (texts.length) return texts.join('').trim();
+      }
+      if (Array.isArray(resJson.content)) {
+        const texts = [];
+        resJson.content.forEach(c => {
+          if (c && typeof c.text === 'string') texts.push(c.text);
+          if (c && Array.isArray(c.content)) {
+            c.content.forEach(cc => {
+              if (cc && typeof cc.text === 'string') texts.push(cc.text);
+            });
+          }
+        });
+        if (texts.length) return texts.join('').trim();
+      }
+      return JSON.stringify(resJson);
+    } else {
+      if (resJson && resJson.choices && resJson.choices[0] && resJson.choices[0].message) {
+        const out = resJson.choices[0].message.content;
+        if (typeof out === 'string') return out.trim();
+      }
+      return JSON.stringify(resJson);
+    }
+  } catch (e) {
+    Logger.log('extractTextFromApiResponse error: ' + e.message);
+    return JSON.stringify(resJson);
+  }
+}
+
+function makeRealUniverseApiCall(payload) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('REALUNIVERSE_API_KEY');
+  if (!apiKey) throw new Error('API Key not set. Please use the menu to set it up.');
+
+  const apiType = getApiTypeForModel(payload && payload.model);
+  const endpoint = apiType === 'responses' ? RESPONSES_API_URL : API_URL;
+  const requestBody = buildRequestBodyForApi(apiType, payload);
+
+  const options = {
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Bearer ' + apiKey },
+    payload: JSON.stringify(requestBody),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(endpoint, options);
+  const status = response.getResponseCode();
+  const bodyText = response.getContentText();
+  let res;
+  try {
+    res = JSON.parse(bodyText);
+  } catch (err) {
+    throw new Error('API Response parse error: ' + bodyText);
+  }
+
+  if (status >= 400) {
+    const errMsg = res && res.error && res.error.message ? res.error.message : bodyText;
+    throw new Error('API Error: ' + errMsg);
+  }
+
+  const text = extractTextFromApiResponse(apiType, res);
+  if (!text || !String(text).trim()) {
+    throw new Error('Invalid response from AI.');
+  }
+  return String(text).trim();
+}
+
+function makeRealUniverseApiCallWithRetry(payload, maxRetries) {
+  if (typeof maxRetries === 'undefined') maxRetries = 2;
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return makeRealUniverseApiCall(payload);
+    } catch (error) {
+      lastError = error;
+      Logger.log(`API call attempt ${attempt + 1} failed: ${error.message}`);
+
+      if (attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt) * 1000;
+        Utilities.sleep(delayMs);
+      }
+    }
+  }
+
+  throw new Error(`API call failed after ${maxRetries + 1} attempts. Last error: ${lastError.message}`);
+}
+
+function makeRealUniverseImageApiCall(payload) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('REALUNIVERSE_API_KEY');
+  if (!apiKey) throw new Error('API Key not set. Please use the menu to set it up.');
+
+  const options = {
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Bearer ' + apiKey },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(IMAGE_API_URL, options);
+  const res = JSON.parse(response.getContentText());
+
+  if (response.getResponseCode() >= 400) {
+    throw new Error('Image API Error: ' + (res.error ? res.error.message : response.getContentText()));
+  }
+
+  if (!res.data || !res.data[0] || !res.data[0].url) {
+    throw new Error('Invalid response from Image API.');
+  }
+
+  return {
+    imageUrl: res.data[0].url,
+    revisedPrompt: res.data[0].revised_prompt || payload.prompt
+  };
+}
+
+function insertImageToSheet(imageUrl, description) {
+  try {
+    const response = UrlFetchApp.fetch(imageUrl);
+    let blob = response.getBlob();
+
+    blob = Utilities.newBlob(
+      blob.getBytes(),
+      'image/jpeg',
+      'resized_image.jpg'
+    );
+
+    let folder;
+    const folders = DriveApp.getFoldersByName('RealUniverse Images');
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      folder = DriveApp.createFolder('RealUniverse Images');
+    }
+
+    const file = folder.createFile(blob.setName('RealUniverse_' + new Date().getTime() + '.jpg'));
+
+    const thumbnailBlob = blob.setName('thumb_' + new Date().getTime() + '.jpg');
+
+    const sheet = SpreadsheetApp.getActiveSheet();
+    sheet.insertImage(thumbnailBlob, 1, 3);
+
+    return file.getUrl();
+
+  } catch (error) {
+    Logger.log('Error: ' + error.toString());
+    return false;
+  }
+}
+
+function getRealUniverseSystemMessage(cellReference, mode) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Preset');
+
+  if (!sheet) {
+    throw new Error('❌ ไม่พบ Sheet "Preset" โปรดสร้าง Sheet ชื่อ "Preset" ก่อนใช้งาน');
+  }
+
+  try {
+    if (cellReference.includes('Preset!')) {
+      const cellAddr = cellReference.split('!')[1];
+      const value = sheet.getRange(cellAddr).getValue();
+      if (value && String(value).trim()) {
+        return String(value).trim();
+      } else {
+        throw new Error(`❌ เซลล์ ${cellReference} ใน Sheet "Preset" ว่างเปล่า`);
+      }
+    }
+  } catch (e) {
+    if (e.message.includes('❌')) throw e;
+    throw new Error('❌ เกิดข้อผิดพลาดในการอ่าน Sheet "Preset": ' + e.message);
+  }
+
+  if (mode === 'array') {
+    return 'You are an AI that analyzes data and returns results in JSON format. For each row of input data, provide a JSON object in the format {"row": <row_number>, "result": "<analysis_result>"}. Return an array of these objects.';
+  } else if (mode === 'image') {
+    return 'Create a detailed image based on this description: {prompt}';
+  } else {
+    return 'You are a helpful AI assistant that analyzes spreadsheet data and provides insights in Thai language.';
+  }
+}
+
+function chunkDataByCharLimit(lines, charLimit) {
+  if (!lines || lines.length === 0) return [];
+
+  const chunks = [];
+  let currentChunkLines = [];
+  let currentCharCount = 0;
+
+  for (const line of lines) {
+    const processedLine = line.trim() === '' ? '(แถวว่าง)' : line;
+    const lineLength = processedLine.length + 1;
+
+    if (currentCharCount + lineLength > charLimit && currentChunkLines.length > 0) {
+      chunks.push(currentChunkLines.join('\n'));
+      currentChunkLines = [processedLine];
+      currentCharCount = lineLength;
+    } else {
+      currentChunkLines.push(processedLine);
+      currentCharCount += lineLength;
+    }
+  }
+
+  if (currentChunkLines.length > 0) {
+    chunks.push(currentChunkLines.join('\n'));
+  }
+
+  return chunks;
+}
+
+function cleanCellData(cellValue) {
+  if (cellValue == null || cellValue === '') return '';
+
+  return String(cellValue)
+    .replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[|:]/g, ' ')
+    .replace(/&[a-zA-Z0-9#]+;/g, ' ')
+    .replace(/["""'']/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^["']|["']$/g, '');
+}
+
+function convertToColumnNumber(input) {
+  input = String(input).toUpperCase().trim();
+  if (!isNaN(input) && Number(input) > 0) return parseInt(input, 10);
+  let result = 0;
+  for (let i = 0; i < input.length; i++) {
+    result = result * 26 + (input.charCodeAt(i) - 'A'.charCodeAt(0) + 1);
+  }
+  return result > 0 ? result : null;
+}
+
+/* ------------------ UTILITY FUNCTIONS ------------------ */
+
+function saveRealUniverseHistory(question, answer) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(CHAT_SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(CHAT_SHEET_NAME);
+      sheet.getRange('A1:D1').setValues([['Timestamp', 'Question', 'Answer', 'Selected Cells']]).setFontWeight('bold');
+    }
+    const selection = getRealUniverseSelectedCellInfo();
+    sheet.appendRow([new Date(), question, String(answer), selection]);
+  } catch (e) {
+    Logger.log('Error saving history: ' + e.message);
+  }
+}
+
+function clearRealUniverseHistory() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert('Confirm Clear', 'Clear all chat history?', ui.ButtonSet.YES_NO);
+  if (response === ui.Button.YES) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CHAT_SHEET_NAME);
+    if (sheet) {
+      sheet.clearContents().getRange('A1:D1')
+        .setValues([['Timestamp', 'Question', 'Answer', 'Selected Cells']])
+        .setFontWeight('bold');
+      ui.alert('Success', 'Chat history cleared.', ui.ButtonSet.OK);
+    }
+  }
+}
+
+function getRealUniverseSelectedCellInfo() {
+  try {
+    const rangeList = SpreadsheetApp.getActiveSpreadsheet().getActiveRangeList();
+    if (rangeList) {
+      const ranges = rangeList.getRanges();
+      const sheetName = ranges[0].getSheet().getName();
+      if (ranges.length > 1) {
+        return sheetName + '!' + ranges.map(r => r.getA1Notation()).join(', ');
+      } else if (ranges.length === 1) {
+        const r = ranges[0];
+        return sheetName + '!' + r.getA1Notation() + ' (' + r.getNumRows() + ' rows, ' + r.getNumColumns() + ' cols)';
+      }
+    }
+    return '(No cells selected)';
+  } catch (e) {
+    return '(Error reading selection)';
+  }
+}
+
+function getRealUniverseHtmlContent() {
+  return `<!DOCTYPE html>
+<html lang="th">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RealUniverse AI</title>
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #f5f5f7;
+    height: 100vh;
+    width: 100vw;     
+    margin: 0;        
+    padding: 0;      
+    overflow: hidden;
+}
+.container {
+    height: 100%;
+    width: 100%;      
+    display: flex;
+    flex-direction: column;
+    background: white;
+    position: relative;
+}
+.mode-switch-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #86868b;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    outline: none;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.mode-switch-button:hover {
+    color: #1d1d1f;
+    background: #f8f9fa;
+}
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 12px;
+    background: #F0FFFF;
+    scroll-behavior: smooth;
+}
+.message {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    position: relative;
+}
+.message.user {
+    align-items: flex-end;
+}
+.message-content {
+    max-width: 100%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    font-size: 12px;
+    line-height: 1.3;
+    word-wrap: break-word;
+    word-break: break-word;
+    white-space: pre-wrap;
+    position: relative;
+}
+.message.user .message-content {
+    background: #E6E6FA;
+    color: #1d1d1f;
+    border-bottom-right-radius: 4px;
+}
+.message.bot .message-content {
+    background: #F0FFFF;
+    color: #1d1d1f;
+    border-bottom-left-radius: 4px;
+}
+.message-content strong {
+    font-weight: 600;
+    color: #1d1d1f;
+}
+
+/* ⭐ Thinking Box - Updated Design */
+.thinking-box {
+    background: #f8f9fa;
+    border: 1px solid #e5e5e7;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    max-width: 85%;
+    font-size: 10px;
+}
+.thinking-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #1d1d1f;
+    margin-bottom: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+.thinking-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #1d1d1f;
+}
+.thinking-collapse-toggle {
+    font-size: 10px;
+    color: #86868b;
+}
+.thinking-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.thinking-step {
+    padding: 4px 0 4px 8px;
+    border-left: 2px solid #8360c3;
+    color: #424245;
+    line-height: 1.6;
+    opacity: 0;
+    transform: translateY(-5px);
+}
+.thinking-content {
+    max-height: none;
+    overflow: visible;
+}
+.thinking-content.collapsed {
+    display: none;
+}
+
+.copy-button {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #86868b;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+.copy-button:hover {
+    background: transparent;
+    color: #1d1d1f;
+}
+.copy-button.copied {
+    background: transparent;
+    color: #059669;
+}
+.message.bot.typing-finished .copy-button {
+    display: flex;
+}
+
+.tooltip {
+    position: relative;
+}
+.tooltip:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1d1d1f;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 1000;
+    opacity: 1;
+    pointer-events: none;
+}
+.tooltip:hover::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #1d1d1f;
+    z-index: 1000;
+    opacity: 1;
+    pointer-events: none;
+}
+
+.input-area {
+    background: #F0FFFF;
+    padding: 16px 16px 0 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+}
+
+.sidebar-mode .expanded-input-container {
+    max-width: none;
+    width: 100%;
+}
+.sidebar-mode .turbo-wrapper {
+    max-width: none;
+    width: 100%;
+}
+.sidebar-mode .quick-actions-buttons {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.sidebar-mode .quick-action-btn {
+    border-radius: 12px;
+    text-align: center;
+    flex: none;
+}
+
+.sidebar-mode .in-box-controls {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.sidebar-mode .status-text {
+    font-size: 9px;
+    padding: 3px 6px;
+}
+
+.sidebar-mode .turbo-toggle {
+    font-size: 9px;
+    padding: 3px 6px;
+}
+
+.sidebar-mode .thinking-toggle {
+    font-size: 9px;
+    padding: 3px 6px;
+}
+
+.sidebar-mode .hamburger-btn {
+    padding: 3px 6px;
+    font-size: 10px;
+}
+
+.sidebar-mode .sendButton {
+    width: 28px;
+    height: 28px;
+}
+
+.custom-title-bar {
+    background: #F0FFFF;
+    border-bottom: none;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+}
+.app-title {
+    background: linear-gradient(45deg, #8360c3, #2ebf91, #8360c3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 20px;
+    letter-spacing: 0.3px;
+    margin: 0;
+    padding-left: 40px;
+    position: relative;
+}
+
+.app-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="%238360c3" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.826 5.376c2.8-1.995 5.087-2.882 5.883-2.085c.797.796-.09 3.083-2.085 5.884m-13.248 5.65c-1.995 2.8-2.882 5.088-2.085 5.884c.796.797 3.083-.09 5.884-2.085m9.45-9.45c-1.133 1.59-2.622 3.345-4.364 5.087s-3.497 3.231-5.086 4.363m9.45-9.45A7.2 7.2 0 0 1 19.2 12a7.2 7.2 0 0 1-10.025 6.624M17.09 6.91A7.2 7.2 0 1 0 6.91 17.09" color="%238360c3"/></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+.turbo-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 4px;
+}
+.turbo-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+.turbo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 10px;
+    color: #86868b;
+    outline: none;
+    transition: all 0.2s ease;
+}
+.turbo-toggle.active {
+    background: #b3e5fc;
+    color: #1d1d1f;
+}
+.turbo-status {
+    font-size: 9px;
+    color: #86868b;
+    margin-left: 8px;
+}
+
+/* ⭐ Thinking Mode Toggle */
+.thinking-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid #d1d5db;
+    cursor: pointer;
+    font-size: 10px;
+    color: #86868b;
+    outline: none;
+    transition: all 0.2s ease;
+}
+.thinking-toggle.active {
+    background: #ddd6fe;
+    color: #1d1d1f;
+    border-color: #8360c3;
+}
+
+.send-button {
+    background: white;
+    color: white;
+    border: 2px solid #e5e5e7;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+    background-image: url('https://i.ibb.co/vvCrQ8DW/RS.jpg');
+    background-size: 26px 26px;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: all 0.2s ease;
+}
+.send-button:hover {
+    background-color: #f8f9fa;
+    border-color: #d1d5db;
+    transform: scale(1.05);
+}
+.send-button:disabled {
+    background-color: #f5f5f5;
+    background-image: url('https://i.ibb.co/vvCrQ8DW/RS.jpg');
+    border-color: #e5e5e7;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.send-button:disabled.spinning {
+    animation: spin 1s linear infinite !important;
+    background-color: #f5f5f5 !important;
+    background-image: url('https://i.ibb.co/vvCrQ8DW/RS.jpg') !important;
+    border-color: #e5e5e7 !important;
+    cursor: not-allowed !important;
+    opacity: 0.6 !important;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.send-button.spinning {
+    animation: spin 1s linear infinite;
+}
+
+.expanded-input-container {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    align-items: stretch;
+    background: white;
+    border: 1px solid #E6E6FA;
+    border-radius: 20px;
+    padding: 6px 12px;
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.input-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.message-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 10px 0 0 0;
+    font-size: 12px;
+    outline: none;
+    resize: none;
+    max-height: 100px;
+    min-height: 24px;
+    line-height: 1.4;
+    font-family: inherit;
+    color: #1d1d1f;
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+.message-input::-webkit-scrollbar {
+    display: none;
+}
+.message-input::placeholder {
+    color: #86868b;
+}
+
+.in-box-controls {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   margin-top: 14px;
+   padding: 4px 0 8px 0;
+   position: relative;
+}
+
+.hamburger-btn {
+    background: transparent;
+    border: 1px solid #d1d5db;
+    color: #86868b;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.hamburger-btn:hover {
+    background: rgba(255,255,255,0.5);
+    color: #1d1d1f;
+}
+
+.status-text {
+    font-size: 10px;
+    color: #86868b;
+    border: 1px solid #d1d5db;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.sendButton {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid #E6E6FA;
+    background: white;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    flex-shrink: 0;
+    align-self: flex-end;
+    background-image: url('https://i.ibb.co/vvCrQ8DW/RS.jpg');
+    background-size: 26px 26px;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: all 0.2s ease;
+}
+
+.sendButton:hover {
+    background-color: white;
+    transform: scale(1.05);
+}
+
+.sendButton:disabled {
+    background-color: #f5f5f5;
+    background-image: url('https://i.ibb.co/vvCrQ8DW/RS.jpg');
+    border-color: #e5e5e7;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.sendButton:disabled.spinning {
+    animation: spin 1s linear infinite !important;
+    background-color: #f5f5f5 !important;
+    background-image: url('https://i.ibb.co/vvCrQ8DW/RS.jpg') !important;
+    border-color: #e5e5e7 !important;
+    cursor: not-allowed !important;
+    opacity: 0.6 !important;
+}
+
+.sendButton.spinning {
+    animation: spin 1s linear infinite;
+}
+
+.settings-popup {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    padding: 16px;
+    width: 320px;
+    max-height: 350px;
+    overflow-y: auto;
+    display: none;
+    z-index: 1000;
+}
+
+.settings-popup.show {
+    display: block;
+}
+
+.popup-section {
+    margin-bottom: 12px;
+}
+
+.popup-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1d1d1f;
+    margin-bottom: 6px;
+}
+
+.popup-options {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.popup-option {
+    padding: 4px 8px;
+    background: #f8f9fa;
+    border: 1px solid #e5e5e7;
+    border-radius: 6px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.popup-option:hover {
+    background: #e5e5e7;
+}
+
+.popup-option.active {
+    background: #8360c3;
+    color: white;
+    border-color: #8360c3;
+}
+
+.array-info {
+    background: #F0FFFF;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    color: #0066cc;
+    border: 1px solid #F0FFFF;
+    margin-top: -4px;
+}
+.messages::-webkit-scrollbar {
+    width: 4px;
+}
+.messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+.messages::-webkit-scrollbar-thumb {
+    background: #c7c7cc;
+    border-radius: 4px;
+}
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: white;
+    border-radius: 18px;
+    border-bottom-left-radius: 4px;
+}
+
+.typing-indicator-text {
+    color: #8360c3;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 120px;
+}
+.typing-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #86868b;
+    animation: typing 1.4s infinite;
+}
+.typing-dot:nth-child(2) {
+    animation-delay: 0.2s;
+}
+.typing-dot:nth-child(3) {
+    animation-delay: 0.4s;
+}
+@keyframes typing {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+    30% {
+        transform: translateY(-4px);
+        opacity: 1;
+    }
+}
+.empty-state {
+    text-align: center;
+    color: #86868b;
+    font-size: 14px;
+    padding: 0;
+    line-height: 1.5;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+}
+
+.quick-actions {
+    padding: 8px 16px 12px 16px;
+    background: transparent;
+}
+.quick-actions-label {
+    font-size: 11px;
+    color: #86868b;
+    margin-bottom: 0;
+    text-align: center;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+.quick-actions:hover .quick-actions-buttons {
+    opacity: 1;
+    max-height: 100px;
+    margin-top: 8px;
+}
+
+.quick-actions:hover .quick-actions-label {
+    color: #1d1d1f;
+}
+.quick-actions-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+.quick-action-btn {
+    background: #1d1d1f;
+    border: 1px solid #1d1d1f;
+    border-radius: 16px;
+    padding: 3px 7px;
+    font-size: 7px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+    font-family: inherit;
+}
+.quick-action-btn:hover {
+    background: #2d2d2f;
+    border-color: #2d2d2f;
+    transform: translateY(-1px);
+}
+.quick-action-btn:active {
+    transform: translateY(0);
+    background: #0d0d0f;
+}
+</style>
+</head>
+<body>
+<div class="container" id="main-container">
+    <div class="custom-title-bar">
+        <div class="app-title">Real Universe Agentic</div>
+        <button class="mode-switch-button" id="mode-switch-button" onclick="toggleDisplayMode()">
+            ▢▣
+        </button>
+    </div>
+    
+    <div class="chat-container">
+        <div class="messages" id="messages">
+            <div class="empty-state">Intelligent insights for your Google Sheets</div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="quick-actions" id="quick-actions">
+            <div class="quick-actions-label">Quick Action</div>
+            <div class="quick-actions-buttons">
+                <button class="quick-action-btn" onclick="sendQuickAction('วิเคราะห์ข้อมูล')">วิเคราะห์ข้อมูล</button>
+                <button class="quick-action-btn" onclick="sendQuickAction('วิเคราะห์ข้อมูลพร้อมสัดส่วน')">วิเคราะห์ข้อมูลพร้อมสัดส่วน</button>
+                <button class="quick-action-btn" onclick="sendQuickAction('ค้นหาประเด็นสำคัญ')">ค้นหาประเด็นสำคัญ</button>
+            </div>
+        </div>
+
+        <div class="turbo-wrapper">
+            <div class="turbo-container">
+                <button class="turbo-toggle" id="turbo-toggle" onclick="toggleTurbo()">💡 Deep</button>
+                <button class="thinking-toggle" id="thinking-toggle" onclick="toggleThinking()">🧠 Thinking</button>
+            </div>
+        </div>
+
+        <div class="expanded-input-container">
+            <div class="input-content">
+                <textarea
+                    class="message-input"
+                    id="messageInput"
+                    placeholder="Ask me anything.."
+                    rows="1"
+                ></textarea>
+                
+                <div class="in-box-controls">
+                    <button class="hamburger-btn" onclick="toggleSettingsPopup()">Settings</button>
+                    <span class="status-text" id="statusText">Answer • Loading... • Exact</span>
+
+                    <div class="settings-popup" id="settingsPopup">
+                        <div class="popup-section">
+                            <div class="popup-title">Mode</div>
+                            <div class="popup-options">
+                                <div class="popup-option active" onclick="selectPopupMode('Answer', this, 'action')">Answer</div>
+                                <div class="popup-option" onclick="selectPopupMode('Array', this, 'array')">Array</div>
+                                <div class="popup-option" onclick="selectPopupMode('Create Picture', this, 'image')">Create Picture</div>
+                            </div>
+                        </div>
+
+                        <div class="popup-section">
+                            <div class="popup-title">Preset</div>
+                            <div class="popup-options" id="popupPresetOptions">
+                                <div style="padding: 12px; text-align: center; font-size: 10px; color: #86868b;">
+                                    Loading presets...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="popup-section">
+                            <div class="popup-title">🧠 Thinking Model</div>
+                            <div class="popup-options">
+                                <div class="popup-option active" onclick="selectThinkingModel('gpt-4.1-mini', this)">Mini (Fast)</div>
+                                <div class="popup-option" onclick="selectThinkingModel('gpt-4.1', this)">Standard</div>
+                                <div class="popup-option" onclick="selectThinkingModel('gpt-4o', this)">Advanced</div>
+                            </div>
+                        </div>
+
+                        <div class="popup-section">
+                            <div class="popup-title">AI Creativity</div>
+                            <div class="popup-options">
+                                <div class="popup-option active" onclick="selectPopupTemp('Exact', this, 0)">Exact</div>
+                                <div class="popup-option" onclick="selectPopupTemp('Focused', this, 0.2)">Focused</div>
+                                <div class="popup-option" onclick="selectPopupTemp('Balance', this, 0.5)">Balance</div>
+                                <div class="popup-option" onclick="selectPopupTemp('Creative', this, 0.7)">Creative</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="sendButton" id="sendButton" onclick="sendMessage()"></button>
+        </div>
+        
+        <div id="selected-cell" class="array-info">Selected: No data selected</div>
+    </div>
+</div>
+<script>
+let currentMode = 'action';
+let currentPreset = null;
+let currentTemperature = 0;
+let thinkingModel = 'gpt-4.1-mini';  // ⭐ NEW: Separate model for Thinking
+let isTyping = false;
+let currentTypingElement = null;
+let currentTypingText = '';
+let turboMode = false;
+let thinkingMode = false;
+
+let dynamicPresets = null;
+let presetDescriptions = {};
+
+function parseMarkdown(text) {
+   return text.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
+}
+
+function convertLinksToClickable(text) {
+   return text.replace(/(https?:\\/\\/[^\\s<>]+)/g, 
+       '<a href="$1" target="_blank" style="color: #0066cc; text-decoration: underline;">Link</a>');
+}
+
+function copyToClipboard(text, button) {
+   try {
+       const tempDiv = document.createElement('div');
+       tempDiv.innerHTML = text;
+       const plainText = tempDiv.textContent || tempDiv.innerText || '';
+       
+       navigator.clipboard.writeText(plainText).then(() => {
+           button.innerHTML = '☑';
+           button.classList.add('copied');
+           button.setAttribute('data-tooltip', 'Copied!');
+           
+           setTimeout(() => {
+               button.innerHTML = '🗒';
+               button.classList.remove('copied');
+               button.setAttribute('data-tooltip', 'Copy');
+           }, 2000);
+       }).catch(() => {
+           const textArea = document.createElement('textarea');
+           textArea.value = plainText;
+           textArea.style.position = 'fixed';
+           textArea.style.opacity = '0';
+           document.body.appendChild(textArea);
+           textArea.select();
+           document.execCommand('copy');
+           document.body.removeChild(textArea);
+           
+           button.innerHTML = '☑';
+           button.classList.add('copied');
+           button.setAttribute('data-tooltip', 'Copied!');
+           
+           setTimeout(() => {
+               button.innerHTML = '🗒';
+               button.classList.remove('copied');
+               button.setAttribute('data-tooltip', 'Copy');
+           }, 2000);
+       });
+   } catch (error) {
+       console.error('Copy failed:', error);
+       button.setAttribute('data-tooltip', 'Copy failed');
+       setTimeout(() => {
+           button.setAttribute('data-tooltip', 'Copy');
+       }, 2000);
+   }
+}
+
+function toggleTurbo() {
+   turboMode = !turboMode;
+   const turboToggle = document.getElementById('turbo-toggle');
+
+   if (turboMode) {
+       turboToggle.classList.add('active');
+   } else {
+       turboToggle.classList.remove('active');
+   }
+}
+
+/**
+ * ⭐ NEW: Toggle Thinking Mode (outside settings)
+ */
+function toggleThinking() {
+    thinkingMode = !thinkingMode;
+    const toggle = document.getElementById('thinking-toggle');
+
+    if (thinkingMode) {
+        toggle.classList.add('active');
+        turboMode = false;
+        document.getElementById('turbo-toggle').classList.remove('active');
+    } else {
+        toggle.classList.remove('active');
+    }
+}
+
+function toggleSettingsPopup() {
+   const popup = document.getElementById('settingsPopup');
+   popup.classList.toggle('show');
+}
+
+function selectPopupMode(modeName, element, modeValue) {
+   currentMode = modeValue;
+   document.querySelectorAll('#settingsPopup .popup-section:nth-child(1) .popup-option').forEach(option => {
+       option.classList.remove('active');
+   });
+   element.classList.add('active');
+   updateMode();
+   updateStatusText();
+}
+
+function selectPopupPreset(presetName, element, presetValue) {
+   currentPreset = presetValue;
+   document.querySelectorAll('#popupPresetOptions .popup-option').forEach(option => {
+       option.classList.remove('active');
+   });
+   element.classList.add('active');
+   updateStatusText();
+}
+
+function selectThinkingModel(modelName, element) {
+   thinkingModel = modelName;
+   document.querySelectorAll('#settingsPopup .popup-section:nth-child(3) .popup-option').forEach(option => {
+       option.classList.remove('active');
+   });
+   element.classList.add('active');
+   updateStatusText();
+}
+
+function selectPopupTemp(tempName, element, tempValue) {
+   currentTemperature = tempValue;
+   document.querySelectorAll('#settingsPopup .popup-section:nth-child(4) .popup-option').forEach(option => {
+       option.classList.remove('active');
+   });
+   element.classList.add('active');
+   updateStatusText();
+}
+
+function updateStatusText() {
+   const mode = document.querySelector('#settingsPopup .popup-section:nth-child(1) .popup-option.active').textContent;
+   const preset = document.querySelector('#popupPresetOptions .popup-option.active')?.textContent || 'Loading...';
+   const creativity = document.querySelector('#settingsPopup .popup-section:nth-child(4) .popup-option.active').textContent;
+
+   const statusText = mode + ' • ' + preset + ' • ' + creativity;
+   document.getElementById('statusText').textContent = statusText;
+}
+
+function loadDynamicPresets() {
+   google.script.run
+       .withSuccessHandler(presets => {
+           dynamicPresets = presets;
+           updatePopupPresetsUI(presets);
+           loadPresetDescriptions();
+       })
+       .withFailureHandler(error => {
+           console.error('Error loading presets:', error);
+           showPopupPresetError(error.message || error.toString());
+       })
+       .getDynamicPresets();
+}
+
+function loadPresetDescriptions() {
+   if (!dynamicPresets) return;
+   
+   const allPresetKeys = [
+       ...Object.keys(dynamicPresets.action || {}),
+       ...Object.keys(dynamicPresets.array || {})
+   ];
+   
+   allPresetKeys.forEach(key => {
+       google.script.run
+           .withSuccessHandler(description => {
+               presetDescriptions[key] = description;
+           })
+           .withFailureHandler(() => {
+               presetDescriptions[key] = 'ไม่มีคำอธิบาย';
+           })
+           .getPresetDescriptionByKey(key);
+   });
+}
+
+function updatePopupPresetsUI(presets) {
+   const presetContainer = document.getElementById('popupPresetOptions');
+   presetContainer.innerHTML = '';
+
+   const currentPresetList = presets[currentMode] || {};
+   const presetKeys = Object.keys(currentPresetList)
+       .sort((a, b) => currentPresetList[a].ROW_NUMBER - currentPresetList[b].ROW_NUMBER);
+   
+   if (presetKeys.length === 0) {
+       showPopupPresetError(\`No \${currentMode === 'action' ? 'Action' : 'Array'} Presets in Sheet "Preset"\`);
+       return;
+   }
+   
+   let presetExists = currentPreset && presetKeys.includes(currentPreset);
+   if (!presetExists && presetKeys.length > 0) {
+       currentPreset = presetKeys[0];
+   }
+   
+   presetKeys.forEach(key => {
+       const preset = currentPresetList[key];
+       const option = document.createElement('div');
+       option.className = 'popup-option';
+       option.textContent = preset.DISPLAY_NAME;
+       option.onclick = () => selectPopupPreset(preset.DISPLAY_NAME, option, key);
+       
+       if (key === currentPreset) {
+           option.classList.add('active');
+       }
+       
+       presetContainer.appendChild(option);
+   });
+   
+   updateStatusText();
+}
+
+function showPopupPresetError(errorMessage) {
+   const presetContainer = document.getElementById('popupPresetOptions');
+   presetContainer.innerHTML = \`
+       <div style="padding: 12px; color: #dc2626; font-size: 10px; text-align: center; line-height: 1.4;">
+           \${errorMessage.replace(/\\n/g, '<br>')}
+       </div>
+   \`;
+   updateStatusText();
+}
+
+/**
+ * ⭐ UPDATED: Show/hide turbo and thinking toggles based on mode
+ */
+function updateMode() {
+    const turboToggle = document.getElementById('turbo-toggle');
+    const thinkingToggle = document.getElementById('thinking-toggle');
+    const turboWrapper = document.querySelector('.turbo-wrapper');
+
+    if (currentMode === 'action') {
+        turboWrapper.style.display = 'flex';
+    } else {
+        turboWrapper.style.display = 'none';
+        turboMode = false;
+        thinkingMode = false;
+        turboToggle.classList.remove('active');
+        thinkingToggle.classList.remove('active');
+    }
+
+    loadDynamicPresets();
+}
+
+function updateSelectedCell() {
+   google.script.run.withSuccessHandler(cellInfo => {
+       const selectedCell = document.getElementById('selected-cell');
+       selectedCell.textContent = 'Data selected: ' + cellInfo;
+   }).getRealUniverseSelectedCellInfo();
+}
+
+/**
+ * ⭐ NEW: Create Thinking Box with Placeholder
+ * Returns the thinking box element for later updates
+ */
+function createThinkingBox() {
+    const messages = document.getElementById('messages');
+    const emptyState = messages.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+
+    const thinkingBox = document.createElement('div');
+    thinkingBox.className = 'thinking-box';
+    thinkingBox.id = 'current-thinking-box';
+
+    const header = document.createElement('div');
+    header.className = 'thinking-header';
+
+    const title = document.createElement('div');
+    title.className = 'thinking-title';
+    title.innerHTML = '💭 กำลังคิด...';
+
+    const toggle = document.createElement('div');
+    toggle.className = 'thinking-collapse-toggle';
+    toggle.textContent = '▲';
+
+    header.onclick = function() {
+        const content = thinkingBox.querySelector('.thinking-content');
+        content.classList.toggle('collapsed');
+        toggle.textContent = content.classList.contains('collapsed') ? '▼' : '▲';
+    };
+
+    header.appendChild(title);
+    header.appendChild(toggle);
+
+    const stepsContainer = document.createElement('div');
+    stepsContainer.className = 'thinking-steps';
+
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'thinking-content';
+    contentWrapper.appendChild(stepsContainer);
+
+    thinkingBox.appendChild(header);
+    thinkingBox.appendChild(contentWrapper);
+
+    messages.appendChild(thinkingBox);
+    scrollToBottom();
+
+    return thinkingBox;
+}
+
+/**
+ * ⭐ NEW: Update Thinking Box with Real Steps
+ */
+function updateThinkingWithRealSteps(thinkingSteps) {
+    let thinkingBox = document.getElementById('current-thinking-box');
+    
+    // ⭐ ถ้ายังไม่มี thinking box ให้สร้างใหม่เลย
+    if (!thinkingBox) {
+        thinkingBox = createThinkingBox();
+    }
+
+    // Stop fake thinking loop (if exists)
+    if (thinkingBox.stopFakeThinking) {
+        thinkingBox.stopFakeThinking();
+    }
+
+    const stepsContainer = thinkingBox.querySelector('.thinking-steps');
+    if (!stepsContainer) return;
+
+    // Clear all fake steps
+    stepsContainer.innerHTML = '';
+
+    // Animate real steps
+    animateThinkingSteps(stepsContainer, thinkingSteps, false);
+}
+
+/**
+ * ⭐ NEW: Animate Thinking Steps (step-by-step with fade-in)
+ */
+function animateThinkingSteps(container, steps, isFake) {
+    let stepIndex = 0;
+
+    function addNextStep() {
+        if (stepIndex >= steps.length) {
+            return;
+        }
+
+        const step = steps[stepIndex];
+        const stepDiv = document.createElement('div');
+        stepDiv.className = 'thinking-step';
+        stepDiv.textContent = '';
+        container.appendChild(stepDiv);
+
+        // Fade in animation
+        setTimeout(() => {
+            stepDiv.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            stepDiv.style.opacity = '1';
+            stepDiv.style.transform = 'translateY(0)';
+        }, 100);
+
+        // Type word by word with thinking pauses
+        const words = step.split(' ');
+        let wordIndex = 0;
+
+        function typeNextWord() {
+            if (wordIndex < words.length) {
+                stepDiv.textContent += (wordIndex > 0 ? ' ' : '• ') + words[wordIndex];
+                wordIndex++;
+                scrollToBottom();
+                
+                // ⭐ สุ่มว่าจะ "หยุดคิด" หรือไม่
+                const shouldPause = Math.random() < 0.25; // 25% โอกาสหยุดคิด
+                
+                if (shouldPause && wordIndex < words.length - 2) {
+                    // หยุดคิดนานหน่อย (400-800ms)
+                    const pauseTime = 400 + Math.random() * 400;
+                    setTimeout(typeNextWord, pauseTime);
+                } else {
+                    // พิมพ์ต่อปกติ (80-120ms)
+                    const normalSpeed = 80 + Math.random() * 40;
+                    setTimeout(typeNextWord, normalSpeed);
+                }
+            } else {
+                // Move to next step with longer thinking time
+                stepIndex++;
+                const thinkingDelay = 1200 + Math.random() * 1800; // 1.2-3 วินาที
+                setTimeout(addNextStep, thinkingDelay);
+            }
+        }
+
+        typeNextWord();
+    }
+
+    addNextStep();
+}
+
+/**
+ * ⭐ OLD: Keep for backward compatibility (not used anymore)
+ */
+function addThinkingBox(thinkingText) {
+    // This function is deprecated, use createThinkingBox() and animateThinkingSteps() instead
+    const thinkingBox = createThinkingBox();
+    const stepsContainer = thinkingBox.querySelector('.thinking-steps');
+
+    // Convert text to array if needed
+    const steps = Array.isArray(thinkingText) ? thinkingText : [thinkingText];
+    animateThinkingSteps(stepsContainer, steps, false);
+}
+
+function addMessage(text, sender, animate) {
+   if (typeof animate === 'undefined') animate = false;
+   
+   const messages = document.getElementById('messages');
+   const emptyState = messages.querySelector('.empty-state');
+   if (emptyState) emptyState.remove();
+
+   const messageDiv = document.createElement('div');
+   messageDiv.className = 'message ' + sender;
+
+   const content = document.createElement('div');
+   content.className = 'message-content';
+   
+   if (sender === 'bot') {
+       const copyButton = document.createElement('button');
+       copyButton.className = 'copy-button tooltip';
+       copyButton.innerHTML = '🗒';
+       copyButton.setAttribute('data-tooltip', 'Copy');
+       copyButton.onclick = function() {
+           copyToClipboard(content.innerHTML, this);
+       };
+       content.appendChild(copyButton);
+   }
+   
+   if (sender === 'user' || !animate) {
+       if (sender === 'bot') {
+           const withMarkdown = parseMarkdown(text);
+           content.innerHTML = convertLinksToClickable(withMarkdown);
+           if (!content.querySelector('.copy-button')) {
+               const copyButton = document.createElement('button');
+               copyButton.className = 'copy-button tooltip';
+               copyButton.innerHTML = '🗒';
+               copyButton.setAttribute('data-tooltip', 'Copy');
+               copyButton.onclick = function() {
+                   copyToClipboard(content.innerHTML, this);
+               };
+               content.appendChild(copyButton);
+           }
+       } else {
+           content.textContent = text;
+       }
+   } else {
+       content.innerHTML = '';
+       const copyButton = document.createElement('button');
+       copyButton.className = 'copy-button tooltip';
+       copyButton.innerHTML = '🗒';
+       copyButton.setAttribute('data-tooltip', 'Copy');
+       copyButton.onclick = function() {
+           copyToClipboard(content.innerHTML, this);
+       };
+       content.appendChild(copyButton);
+   }
+
+   messageDiv.appendChild(content);
+   messages.appendChild(messageDiv);
+
+   if (sender === 'bot' && animate) {
+       isTyping = true;
+       currentTypingElement = content;
+       currentTypingText = text;
+       updateSendButton();
+       typeWriterByWord(content, text, false);
+   } else {
+       scrollToBottom();
+       if (sender === 'bot') {
+           messageDiv.classList.add('typing-finished');
+       }
+   }
+}
+
+function typeWriterByWord(element, text, isThinkingBox) {
+   if (typeof isThinkingBox === 'undefined') isThinkingBox = false;
+   
+   const words = text.split(' ');
+   let wordIndex = 0;
+   
+   const copyButton = isThinkingBox ? null : element.querySelector('.copy-button');
+   element.innerHTML = '';
+   if (copyButton && !isThinkingBox) {
+       element.appendChild(copyButton);
+   }
+
+   // Set isTyping เป็น true เมื่อเริ่มพิมพ์
+   isTyping = true;
+   updateSendButton();
+
+   function addNextWord() {
+       if (wordIndex < words.length) {
+           const currentText = words.slice(0, wordIndex + 1).join(' ');
+           
+           if (isThinkingBox) {
+               element.textContent = currentText;
+           } else {
+               const withMarkdown = parseMarkdown(currentText);
+               const textContainer = document.createElement('span');
+               textContainer.innerHTML = convertLinksToClickable(withMarkdown);
+               
+               element.innerHTML = '';
+               element.appendChild(textContainer);
+               if (copyButton) {
+                   element.appendChild(copyButton);
+               }
+           }
+           
+           wordIndex++;
+           scrollToBottom();
+           setTimeout(addNextWord, 150);
+       } else {
+           // พิมพ์เสร็จแล้ว
+           isTyping = false;
+           updateSendButton();
+           scrollToBottom();
+           
+           if (!isThinkingBox) {
+               const messageDiv = element.closest('.message');
+               if (messageDiv) {
+                   messageDiv.classList.add('typing-finished');
+               }
+           }
+       }
+   }
+
+   addNextWord();
+}
+
+function stopTyping() {
+   if (isTyping && currentTypingElement && currentTypingText) {
+       isTyping = false;
+       const copyButton = currentTypingElement.querySelector('.copy-button');
+       const withMarkdown = parseMarkdown(currentTypingText);
+       const textContainer = document.createElement('span');
+       textContainer.innerHTML = convertLinksToClickable(withMarkdown);
+       
+       currentTypingElement.innerHTML = '';
+       currentTypingElement.appendChild(textContainer);
+       if (copyButton) {
+           currentTypingElement.appendChild(copyButton);
+       }
+       
+       updateSendButton();
+       scrollToBottom();
+       
+       const messageDiv = currentTypingElement.closest('.message');
+       if (messageDiv) {
+           messageDiv.classList.add('typing-finished');
+       }
+   }
+}
+
+function updateSendButton() {
+   const sendButton = document.getElementById('sendButton');
+   if (isTyping) {
+       sendButton.classList.add('spinning');
+   } else {
+       sendButton.classList.remove('spinning');
+   }
+}
+
+function scrollToBottom() {
+   const messages = document.getElementById('messages');
+   messages.scrollTo({
+       top: messages.scrollHeight,
+       behavior: 'smooth'
+   });
+}
+
+function sendQuickAction(command) {
+   const input = document.getElementById('messageInput');
+   input.value = command;
+   sendMessage();
+}
+
+/**
+ * ⭐ Calculate animation time for thinking steps
+ */
+function calculateThinkingAnimationTime(steps) {
+    let totalTime = 0;
+    steps.forEach(step => {
+        const words = step.split(' ').length;
+        const fadeInTime = 300; // Fade in animation
+        const typeTime = words * 80; // Word-by-word typing (80ms per word)
+        const delayBetweenSteps = 500; // Delay before next step
+        totalTime += fadeInTime + typeTime + delayBetweenSteps;
+    });
+    return totalTime;
+}
+
+/**
+ * ⭐ UPDATED: Send Message with New Parallel Thinking Mode
+ */
+function sendMessage() {
+    if (isTyping) {
+        stopTyping();
+        return;
+    }
+
+    const input = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const question = input.value.trim();
+    if (!question) return;
+
+    if (!currentPreset) {
+        alert('โปรดรอให้ระบบโหลด Presets เสร็จก่อนใช้งาน');
+        return;
+    }
+
+    input.disabled = true;
+    sendButton.disabled = true;
+    isTyping = true;
+    updateSendButton();
+    addMessage(question, 'user', false);
+    input.value = '';
+    input.style.height = 'auto';
+
+    // ⭐ NEW: Parallel API calls for Thinking Mode
+    if (thinkingMode && currentMode === 'action') {
+        // showFakeThinking();
+        showTypingIndicator();
+
+        let thinkingStepsReceived = null;
+        let answerReceived = null;
+        let thinkingAnimationComplete = false;
+
+        // Step 1: Get Thinking Steps
+        google.script.run
+            .withSuccessHandler(thinkingStepsJson => {
+                try {
+                    const thinkingSteps = JSON.parse(thinkingStepsJson);
+                    if (thinkingSteps && thinkingSteps.length > 0) {
+                        thinkingStepsReceived = thinkingSteps;
+
+                        // Replace fake thinking with real steps immediately
+                        updateThinkingWithRealSteps(thinkingSteps);
+
+                        // Calculate animation time
+                        const animationTime = calculateThinkingAnimationTime(thinkingSteps);
+
+                        // Mark animation as complete after animation time
+                        setTimeout(() => {
+                            thinkingAnimationComplete = true;
+                            tryShowAnswer();
+                        }, animationTime);
+
+                        // Step 2: Get Answer (called after receiving thinking steps)
+                        google.script.run
+                            .withSuccessHandler(answer => {
+                                answerReceived = answer;
+                                tryShowAnswer();
+                            })
+                            .withFailureHandler(error => {
+                                hideTypingIndicator();
+                                input.disabled = false;
+                                sendButton.disabled = false;
+                                isTyping = false;
+                                updateSendButton();
+                                input.focus();
+                                addMessage('เกิดข้อผิดพลาด (Answer): ' + error.toString(), 'bot', true);
+                            })
+                            .processAnswerPhaseWithThinking(question, currentPreset, currentTemperature, currentMode, turboMode, thinkingStepsJson);
+                    } else {
+                        // No thinking steps - fallback to normal mode
+                        hideTypingIndicator();
+                        const thinkingBox = document.getElementById('current-thinking-box');
+                        if (thinkingBox) thinkingBox.remove();
+
+                        // Call normal API
+                        callNormalAPI(question, input, sendButton);
+                    }
+                } catch (e) {
+                    console.error('Error parsing thinking steps:', e);
+                    hideTypingIndicator();
+                    const thinkingBox = document.getElementById('current-thinking-box');
+                    if (thinkingBox) thinkingBox.remove();
+
+                    // Fallback to normal mode
+                    callNormalAPI(question, input, sendButton);
+                }
+            })
+            .withFailureHandler(error => {
+                hideTypingIndicator();
+                const thinkingBox = document.getElementById('current-thinking-box');
+                if (thinkingBox) thinkingBox.remove();
+
+                input.disabled = false;
+                sendButton.disabled = false;
+                isTyping = false;
+                updateSendButton();
+                input.focus();
+                addMessage('เกิดข้อผิดพลาด (Thinking): ' + error.toString(), 'bot', true);
+            })
+            .processThinkingPhase(question, currentPreset, currentTemperature, currentMode, turboMode, thinkingModel);
+
+        // Helper function to show answer when both conditions are met
+        function tryShowAnswer() {
+            if (thinkingAnimationComplete && answerReceived) {
+                // Both thinking animation complete AND answer received
+                // Wait 2 seconds before showing answer
+                setTimeout(() => {
+                    hideTypingIndicator();
+                    isTyping = false;
+                    updateSendButton();
+                    addMessage(answerReceived, 'bot', true);
+                    input.disabled = false;
+                    sendButton.disabled = false;
+                    input.focus();
+                }, 4000); // 2-second delay
+            }
+        }
+    } else {
+        // Normal mode (no thinking) - original behavior
+        showTypingIndicator();
+        callNormalAPI(question, input, sendButton);
+    }
+}
+
+/**
+ * ⭐ Helper function for normal API call (non-thinking mode)
+ */
+function callNormalAPI(question, input, sendButton) {
+    google.script.run
+        .withSuccessHandler(answer => {
+            hideTypingIndicator();
+            input.disabled = false;
+            sendButton.disabled = false;
+            isTyping = false;
+            updateSendButton();
+            input.focus();
+
+            if (currentMode === 'array' && Array.isArray(answer)) {
+                addMessage(answer[0][0], 'bot', true);
+            } else {
+                addMessage(answer, 'bot', true);
+            }
+        })
+        .withFailureHandler(error => {
+            hideTypingIndicator();
+            input.disabled = false;
+            sendButton.disabled = false;
+            isTyping = false;
+            updateSendButton();
+            input.focus();
+            addMessage('เกิดข้อผิดพลาด: ' + error.toString(), 'bot', true);
+        })
+        .processRealUniverseAI(question, currentPreset, currentTemperature, currentMode, turboMode, false, thinkingModel);
+}
+
+// ⭐ Typing indicator state
+let typingTextInterval = null;
+let currentTypingMessageIndex = 0;
+
+function showTypingIndicator() {
+   const messages = document.getElementById('messages');
+   const typingDiv = document.createElement('div');
+   typingDiv.className = 'message bot';
+   typingDiv.id = 'typing-indicator';
+
+   const indicator = document.createElement('div');
+   indicator.className = 'typing-indicator';
+
+   // SVG animation
+   const svgIcon = document.createElement('div');
+   svgIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect width="10" height="10" x="1" y="1" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle30" fill="freeze" attributeName="x" begin="0;svgSpinnersBlocksShuffle3b.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle31" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle38.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle32" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle39.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle33" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle3a.end" dur="0.21s" values="13;1"/></rect><rect width="10" height="10" x="1" y="13" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle34" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle30.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle35" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle31.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle36" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle32.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle37" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle33.end" dur="0.21s" values="13;1"/></rect><rect width="10" height="10" x="13" y="13" fill="#8360c3" rx="1"><animate id="svgSpinnersBlocksShuffle38" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle34.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle39" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle35.end" dur="0.21s" values="13;1"/><animate id="svgSpinnersBlocksShuffle3a" fill="freeze" attributeName="x" begin="svgSpinnersBlocksShuffle36.end" dur="0.21s" values="1;13"/><animate id="svgSpinnersBlocksShuffle3b" fill="freeze" attributeName="y" begin="svgSpinnersBlocksShuffle37.end" dur="0.21s" values="1;13"/></rect></svg>';
+
+   // Text element
+   const textElement = document.createElement('span');
+   textElement.className = 'typing-indicator-text';
+   textElement.id = 'typing-text';
+
+   indicator.appendChild(svgIcon);
+   indicator.appendChild(textElement);
+   typingDiv.appendChild(indicator);
+   messages.appendChild(typingDiv);
+   scrollToBottom();
+
+   // Start rotating messages
+   startTypingTextAnimation();
+}
+
+function startTypingTextAnimation() {
+   const typingMessages = [
+       'Moseying...',
+       'Pondering...',
+       'Computing...',
+       'Spinning...',
+       'Thinking...',
+       'Processing...',
+       'Analyzing...',
+       'Contemplating...',
+       'Calculating...',
+       'Cogitating...'
+   ];
+
+   currentTypingMessageIndex = 0;
+
+   function typeMessage() {
+       const textElement = document.getElementById('typing-text');
+       if (!textElement) return; // Element removed, stop animation
+
+       const message = typingMessages[currentTypingMessageIndex];
+       let currentCharIndex = 0;
+       textElement.textContent = '';
+
+       function typeNextChar() {
+           if (!document.getElementById('typing-text')) return; // Check if still exists
+
+           if (currentCharIndex < message.length) {
+               textElement.textContent += message[currentCharIndex];
+               currentCharIndex++;
+               setTimeout(typeNextChar, 60); // Type character by character (60ms per char)
+           } else {
+               // Move to next message after current one is complete
+               currentTypingMessageIndex = (currentTypingMessageIndex + 1) % typingMessages.length;
+               typingTextInterval = setTimeout(typeMessage, 3000); // Wait 3 seconds before next message
+           }
+       }
+
+       typeNextChar();
+   }
+
+   typeMessage();
+}
+
+function hideTypingIndicator() {
+   const indicator = document.getElementById('typing-indicator');
+   if (indicator) indicator.remove();
+
+   // Clear the animation interval
+   if (typingTextInterval) {
+       clearTimeout(typingTextInterval);
+       typingTextInterval = null;
+   }
+}
+
+function toggleDisplayMode() {
+   try {
+       google.script.run
+           .withSuccessHandler(() => {
+           })
+           .withFailureHandler(error => {
+               console.error('Error toggling display mode:', error);
+           })
+           .toggleDisplayMode();
+   } catch (e) {
+       console.error('Error calling toggle function:', e);
+   }
+}
+
+function initializeDisplayMode() {
+   google.script.run
+       .withSuccessHandler(mode => {
+           const container = document.getElementById('main-container');
+           const button = document.getElementById('mode-switch-button');
+           
+           if (mode === 'sidebar') {
+               container.classList.add('sidebar-mode');
+               button.innerHTML = '▢▣';
+           } else {
+               container.classList.remove('sidebar-mode');
+               button.innerHTML = '▢▣';
+           }
+       })
+       .withFailureHandler(() => {
+           const container = document.getElementById('main-container');
+           const button = document.getElementById('mode-switch-button');
+           container.classList.remove('sidebar-mode');
+           button.innerHTML = '▢▣';
+       })
+       .getCurrentDisplayMode();
+}
+
+document.addEventListener('click', function(event) {
+   const popup = document.getElementById('settingsPopup');
+   const trigger = document.querySelector('.hamburger-btn');
+   
+   if (!popup.contains(event.target) && !trigger.contains(event.target)) {
+       popup.classList.remove('show');
+   }
+});
+
+const messageInput = document.getElementById('messageInput');
+messageInput.addEventListener('input', function() {
+   this.style.height = 'auto';
+   this.style.height = this.scrollHeight + 'px';
+});
+
+messageInput.addEventListener('keypress', function(e) {
+   if (e.key === 'Enter' && e.ctrlKey) {
+       e.preventDefault();
+       sendMessage();
+   } else if (e.key === 'Enter' && !e.shiftKey) {
+       e.preventDefault();
+   }
+});
+
+window.onload = function() {
+   setTimeout(() => {
+       messageInput.focus();
+   }, 100);
+   
+   loadDynamicPresets();
+   updateMode();
+   setInterval(updateSelectedCell, 1000);
+   initializeDisplayMode();
+};
+</script>
+</body>
+</html>`;
+}
